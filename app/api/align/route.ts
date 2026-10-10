@@ -4,6 +4,7 @@ import { alignLyrics } from "@/app/lib/align";
 import { detectBpm } from "@/app/lib/ultrastar";
 import type { WordTimestamp, Pause } from "@/app/api/transcribe/route";
 import type { EditorNote } from "@/app/lib/editorNote";
+import { resolveAllowed } from "@/app/lib/safePath";
 
 interface AlignRequest {
   mp3: string;
@@ -15,10 +16,14 @@ interface AlignRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const { mp3, words, language, lyrics, pauses }: AlignRequest = await request.json();
+    const { mp3: mp3Param, words, language, lyrics, pauses }: AlignRequest = await request.json();
 
-    if (!mp3 || !words?.length || !lyrics) {
+    if (!mp3Param || !words?.length || !lyrics) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
+    }
+    const mp3 = resolveAllowed(mp3Param);
+    if (!mp3) {
+      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
     }
     if (!existsSync(mp3)) {
       return NextResponse.json({ message: "Audio file not found" }, { status: 404 });

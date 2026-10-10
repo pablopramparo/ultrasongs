@@ -914,7 +914,7 @@ export default function TimelineEditor({
                 />
               );
             })}
-            {Array.from({ length: Math.ceil(duration + 4) }, (_, beat) => (
+            {Array.from({ length: Math.ceil((duration * bpm) / 60) + 4 }, (_, beat) => (
               <div
                 key={beat}
                 style={{

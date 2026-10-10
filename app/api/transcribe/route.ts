@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync } from "fs";
+import { resolveAllowed } from "@/app/lib/safePath";
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL ?? "http://localhost:8001";
 
@@ -30,10 +31,14 @@ export interface TranscribeResult {
 
 export async function POST(request: NextRequest) {
   try {
-    const { mp3, lyrics } = await request.json();
+    const { mp3: mp3Param, lyrics } = await request.json();
 
-    if (!mp3 || typeof mp3 !== "string") {
+    if (!mp3Param || typeof mp3Param !== "string") {
       return NextResponse.json({ message: "Missing mp3 path" }, { status: 400 });
+    }
+    const mp3 = resolveAllowed(mp3Param);
+    if (!mp3) {
+      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
     }
     if (!existsSync(mp3)) {
       return NextResponse.json({ message: "Audio file not found" }, { status: 404 });

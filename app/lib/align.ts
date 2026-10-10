@@ -80,7 +80,6 @@ function matchLine(
   const matched: Array<WordTimestamp | null> = [];
   let ss = searchStart;
   let lmt = lastMatchTime;
-  let significantMatches = 0;
   const matchedTimes: number[] = [];
   const matchedIndices: Array<number | null> = [];
 
@@ -121,7 +120,6 @@ function matchLine(
       matched.push(whisperWords[bestIdx]);
       matchedTimes.push(whisperWords[bestIdx].start);
       matchedIndices.push(bestIdx);
-      if (lNorm.length > 2) significantMatches++;
     } else {
       matched.push(null);
       matchedIndices.push(null);
@@ -310,11 +308,17 @@ export function alignLyrics(
     for (const word of lineWords) {
       const ts = interpolated[wordIdx++];
       const syllables = splitWord(word, lang);
-      const sylDuration = (ts.end - ts.start) / syllables.length;
+      // Longer syllables (more letters) get proportionally more of the word's time,
+      // instead of an equal split that makes "stra-" and "a" the same length.
+      const weights = syllables.map((s) => Math.max(1, (s.match(/\p{L}/gu) ?? []).length));
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const wordDuration = ts.end - ts.start;
+      let offset = 0;
 
       syllables.forEach((syl, si) => {
-        const start = ts.start + si * sylDuration;
-        const end = ts.start + (si + 1) * sylDuration;
+        const start = ts.start + (offset / totalWeight) * wordDuration;
+        offset += weights[si];
+        const end = ts.start + (offset / totalWeight) * wordDuration;
         output.push({
           syllable: syl,
           start,

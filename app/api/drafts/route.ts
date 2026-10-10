@@ -3,8 +3,7 @@ import { readdir, readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import crypto from "crypto";
-
-const DRAFTS_DIR = path.resolve(process.env.DRAFTS_DIR ?? "./drafts");
+import { DRAFTS_DIR, draftDir, resolveAllowed } from "@/app/lib/safePath";
 
 async function ensureDraftsDir() {
   if (!existsSync(DRAFTS_DIR)) await mkdir(DRAFTS_DIR, { recursive: true });
@@ -45,28 +44,42 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const id: string = draftId ?? crypto.randomUUID();
-    const dir = path.join(DRAFTS_DIR, id);
+    const dir = draftDir(id);
+    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+
+    // Source files must live inside TMP_DIR / DRAFTS_DIR — never copy arbitrary client paths.
+    const mp3Src = resolveAllowed(mp3);
+    const videoSrc = resolveAllowed(videoPath);
+    const vocalsSrc = resolveAllowed(vocalsPath);
+    const accompanimentSrc = resolveAllowed(accompanimentPath);
+
     await mkdir(dir, { recursive: true });
 
+    // Saving over an existing draft passes the draft's own files as sources — skip self-copies.
+    const copyInto = async (src: string, name: string) => {
+      const dest = path.join(dir, name);
+      if (path.resolve(src) !== dest) await copyFile(src, dest);
+    };
+
     const audioFilename = "audio.mp3";
-    if (mp3 && existsSync(mp3)) await copyFile(mp3, path.join(dir, audioFilename));
+    if (mp3Src && existsSync(mp3Src)) await copyInto(mp3Src, audioFilename);
 
     let videoFilename: string | undefined;
-    if (videoPath && existsSync(videoPath)) {
-      videoFilename = "video" + path.extname(videoPath).toLowerCase();
-      await copyFile(videoPath, path.join(dir, videoFilename));
+    if (videoSrc && existsSync(videoSrc)) {
+      videoFilename = "video" + path.extname(videoSrc).toLowerCase();
+      await copyInto(videoSrc, videoFilename);
     }
 
     let vocalsFilename: string | undefined;
-    if (vocalsPath && existsSync(vocalsPath)) {
+    if (vocalsSrc && existsSync(vocalsSrc)) {
       vocalsFilename = "vocals.mp3";
-      await copyFile(vocalsPath, path.join(dir, vocalsFilename));
+      await copyInto(vocalsSrc, vocalsFilename);
     }
 
     let accompanimentFilename: string | undefined;
-    if (accompanimentPath && existsSync(accompanimentPath)) {
+    if (accompanimentSrc && existsSync(accompanimentSrc)) {
       accompanimentFilename = "accompaniment.mp3";
-      await copyFile(accompanimentPath, path.join(dir, accompanimentFilename));
+      await copyInto(accompanimentSrc, accompanimentFilename);
     }
 
     const draft = {

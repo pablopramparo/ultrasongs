@@ -46,18 +46,20 @@ export default function DraftsSidebar({
   const mp3Ref = useRef<HTMLInputElement>(null);
   const vidRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/drafts");
-      if (res.ok) setDrafts(await res.json());
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/drafts");
+        if (res.ok && !cancelled) setDrafts(await res.json());
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();

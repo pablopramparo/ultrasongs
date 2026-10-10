@@ -12,9 +12,7 @@
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "esm": "^3.2.25",
     "fluent-ffmpeg": "^2.1.3",
-    "formidable": "^3.5.4",
     "hyphen": "^1.14.1",
     "jszip": "^3.10.1",
     "music-tempo": "^1.0.3",
@@ -25,8 +23,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/fluent-ffmpeg": "^2.1.28",
-    "@types/formidable": "^3.5.1",
-    "@types/jszip": "^3.4.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

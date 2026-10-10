@@ -4,8 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { parseUltrastarTxt } from "@/app/lib/ultrastar";
 import type { EditorNote } from "@/app/lib/editorNote";
-
-const DRAFTS_DIR = path.resolve(process.env.DRAFTS_DIR ?? "./drafts");
+import { DRAFTS_DIR } from "@/app/lib/safePath";
 
 export async function POST(request: NextRequest) {
   try {

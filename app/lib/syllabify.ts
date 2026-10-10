@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+/* eslint-disable @typescript-eslint/no-require-imports -- hyphen is CJS-only, see serverExternalPackages */
 const hyphenModules: Record<string, { hyphenateSync: (w: string) => string }> = {
   it: require("hyphen/it"),
   en: require("hyphen/en"),

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, writeFile, rm } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
-
-const DRAFTS_DIR = path.resolve(process.env.DRAFTS_DIR ?? "./drafts");
+import { draftDir } from "@/app/lib/safePath";
 
 export async function GET(
   _req: NextRequest,
@@ -11,7 +10,8 @@ export async function GET(
 ) {
   try {
     const { id } = await ctx.params;
-    const dir = path.join(DRAFTS_DIR, id);
+    const dir = draftDir(id);
+    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
     const jsonPath = path.join(dir, "draft.json");
     if (!existsSync(jsonPath)) {
       return NextResponse.json({ message: "Draft not found" }, { status: 404 });
@@ -35,7 +35,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await ctx.params;
-    const jsonPath = path.join(path.resolve(process.env.DRAFTS_DIR ?? "./drafts"), id, "draft.json");
+    const dir = draftDir(id);
+    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+    const jsonPath = path.join(dir, "draft.json");
     if (!existsSync(jsonPath)) {
       return NextResponse.json({ message: "Draft not found" }, { status: 404 });
     }
@@ -55,7 +57,8 @@ export async function DELETE(
 ) {
   try {
     const { id } = await ctx.params;
-    const dir = path.join(DRAFTS_DIR, id);
+    const dir = draftDir(id);
+    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
     if (!existsSync(dir)) {
       return NextResponse.json({ message: "Draft not found" }, { status: 404 });
     }

@@ -29,9 +29,10 @@ COMPUTE_TYPE = "int8" if "large" in WHISPER_MODEL and DEVICE == "cuda" else "aut
 CREPE_SR = 16000
 CREPE_HOP = 160   # 10 ms hop at 16 kHz
 
-# htdemucs constants — don't load the model at startup so Whisper gets full VRAM
+# Demucs constants — don't load the model at startup so Whisper gets full VRAM.
+# DEMUCS_MODEL=htdemucs_ft gives cleaner vocals (fine-tuned per source) at ~4x the time.
+DEMUCS_MODEL = os.environ.get("DEMUCS_MODEL", "htdemucs")
 DEMUCS_SR = 44100
-DEMUCS_VOCALS_IDX = 3  # sources: ['drums', 'bass', 'other', 'vocals']
 
 print(f"[startup] device={DEVICE}  whisper={WHISPER_MODEL}  compute={COMPUTE_TYPE}  align={ALIGN_ENGINE}")
 print("[startup] Loading Whisper (Demucs loaded per-request to save VRAM)…")
@@ -68,7 +69,7 @@ def to_mp3_bytes(audio: np.ndarray, sr: int, bitrate: int = 128) -> bytes:
 def separate_all(audio: np.ndarray, sr: int):
     """Demucs htdemucs → (vocals_mono, accompaniment_mono, out_sr).
     Loads and immediately destroys the model so VRAM is free for Whisper."""
-    model = get_model("htdemucs")
+    model = get_model(DEMUCS_MODEL)
     model.eval()
     if DEVICE == "cuda":
         model = model.cuda()
@@ -81,9 +82,9 @@ def separate_all(audio: np.ndarray, sr: int):
             wav = wav.cuda()
         with torch.no_grad():
             sources = apply_model(model, wav, device=DEVICE)
-        n_sources = sources.shape[1]
-        vocals = sources[0, DEMUCS_VOCALS_IDX].mean(0).cpu().numpy()
-        acc_stems = [sources[0, i] for i in range(n_sources) if i != DEMUCS_VOCALS_IDX]
+        vocals_idx = model.sources.index("vocals")
+        vocals = sources[0, vocals_idx].mean(0).cpu().numpy()
+        acc_stems = [sources[0, i] for i in range(sources.shape[1]) if i != vocals_idx]
         accompaniment = torch.stack(acc_stems).sum(0).mean(0).cpu().numpy()
         del sources, wav, mono
     finally:
@@ -312,9 +313,7 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
                 prompt = lyrics.strip() if lyrics.strip() else None
 
                 def do_whisper():
-                    # Use the original mix (not vocals WAV) — Whisper timestamps
-                    # are more reliable with full audio; Demucs artifacts in the
-                    # vocals-only track often cause large timestamp drift.
+                    # Runs on the Demucs vocals WAV (cleaner than the full mix).
                     if ALIGN_ENGINE == "whisperx":
                         raw_words, language = transcribe_with_whisperx(vocals_wav_path, prompt=prompt or "")
                         return add_pitch_to_words(raw_words, times, freqs, confs), language
@@ -323,6 +322,8 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
                         vocals_wav_path,
                         word_timestamps=True,
                         initial_prompt=prompt,
+                        # Stops a bad segment from poisoning the next ones (repetition / drift in singing).
+                        condition_on_previous_text=False,
                     )
                     raw_words = []
                     for seg in segs:
@@ -375,4 +376,4 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "device": DEVICE, "model": WHISPER_MODEL, "demucs": "htdemucs"}
+    return {"status": "ok", "device": DEVICE, "model": WHISPER_MODEL, "demucs": DEMUCS_MODEL}

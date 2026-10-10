@@ -75,15 +75,30 @@ function extractPcm(mp3Path: string, sampleRate = 44100): Promise<Float32Array> 
   });
 }
 
+/** Lowest BPM we emit — UltraStar beats are 1/4 of a musical beat, so 300 BPM = 20 steps/s (50 ms). */
+const MIN_ULTRASTAR_BPM = 300;
+
 /**
- * Detects BPM from an mp3 file.
+ * UltraStar's BPM is only a time unit, so doubling it (and the beat counts with it)
+ * leaves the timing unchanged while making note positions finer. At a detected 120 BPM
+ * the grid is 125 ms wide, coarser than the ~50 ms Whisper/crepe can resolve.
+ */
+export function toFineBpm(bpm: number): number {
+  if (!Number.isFinite(bpm) || bpm <= 0) return bpm;
+  let out = bpm;
+  while (out < MIN_ULTRASTAR_BPM) out *= 2;
+  return out;
+}
+
+/**
+ * Detects BPM from an mp3 file, scaled by powers of two to a fine UltraStar grid (see toFineBpm).
  * Returns { bpm, beats } where beats are timestamps in seconds.
  */
 export async function detectBpm(mp3Path: string): Promise<{ bpm: number; beats: number[] }> {
   const samples = await extractPcm(mp3Path);
   // MusicTempo expects a plain Array or Float32Array of non-interleaved mono float32 PCM
   const mt = new MusicTempo(samples);
-  return { bpm: parseFloat(String(mt.tempo)), beats: mt.beats };
+  return { bpm: toFineBpm(parseFloat(String(mt.tempo))), beats: mt.beats };
 }
 
 export interface ParsedUltrastar {

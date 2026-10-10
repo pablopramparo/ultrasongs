@@ -8,6 +8,7 @@ import { msToBeats, buildUltrastarTxt, detectBpm } from "@/app/lib/ultrastar";
 import type { WordTimestamp, Pause } from "@/app/api/transcribe/route";
 import type { UltrastarNote } from "@/app/lib/ultrastar";
 import type { EditorNote } from "@/app/lib/editorNote";
+import { resolveAllowed } from "@/app/lib/safePath";
 
 // Mode A: auto-align from raw transcription
 interface GenerateAuto {
@@ -45,10 +46,14 @@ function isFromEditor(b: GenerateRequest): b is GenerateFromEditor {
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateRequest = await request.json();
-    const { mp3, title, artist } = body;
+    const { title, artist } = body;
 
-    if (!mp3 || !title || !artist) {
+    if (!body.mp3 || !title || !artist) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
+    }
+    const mp3 = resolveAllowed(body.mp3);
+    if (!mp3) {
+      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
     }
     if (!existsSync(mp3)) {
       return NextResponse.json({ message: "Audio file not found" }, { status: 404 });
@@ -118,7 +123,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { videoPath, vocalsPath, accompanimentPath } = body;
+    const videoPath = resolveAllowed(body.videoPath) ?? undefined;
+    const vocalsPath = resolveAllowed(body.vocalsPath) ?? undefined;
+    const accompanimentPath = resolveAllowed(body.accompanimentPath) ?? undefined;
     const mp3Filename = path.basename(mp3);
     const videoFilename = videoPath ? path.basename(videoPath) : undefined;
     const txt = buildUltrastarTxt(ultraNotes, { title, artist, mp3: mp3Filename, bpm, gap, video: videoFilename });

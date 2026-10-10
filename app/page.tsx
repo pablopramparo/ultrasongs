@@ -83,10 +83,13 @@ export default function Home() {
 
   // Elapsed timer — runs during transcribing phase
   useEffect(() => {
-    if (phase !== "transcribing") { setTranscribeElapsed(0); return; }
-    setTranscribeElapsed(0);
-    const t = setInterval(() => setTranscribeElapsed((s) => s + 1), 1000);
-    return () => clearInterval(t);
+    if (phase !== "transcribing") return;
+    const startedAt = Date.now();
+    const t = setInterval(() => setTranscribeElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => {
+      clearInterval(t);
+      setTranscribeElapsed(0);
+    };
   }, [phase]);
 
   const busy = phase === "uploading" || phase === "transcribing" || phase === "generating";
