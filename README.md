@@ -11,6 +11,12 @@
   Everything runs on your own machine — no external AI services.
 </p>
 
+<p align="center">
+  <a href="https://github.com/sponsors/pablopramparo">
+    <img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-%E2%99%A5-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white">
+  </a>
+</p>
+
 > **Work in progress** — functional, but rough around the edges.
 
 **Pipeline:** Demucs vocal separation → torchcrepe pitch detection → Whisper/WhisperX transcription → fuzzy lyric alignment → BPM-based beat mapping → Ultrastar `.txt`, with a visual timeline editor to fine-tune the result.
@@ -205,6 +211,10 @@ E
 - `:` normal note · `*` golden note (star) · `F` freestyle (not sung or scored) · `R` rap · `G` golden rap · `-` line break · `E` end of song
 - Note: `[type] [start_beat] [duration_beats] [midi_pitch] [syllable]`
 - `GAP` = milliseconds before beat 0; beat formula: `((ms − GAP) / 1000) × (BPM / 60) × 4`
+
+## Support
+
+If Ultrasongs is useful to you, you can support its development through [GitHub Sponsors](https://github.com/sponsors/pablopramparo).
 
 ## Credits
 
