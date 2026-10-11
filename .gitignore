@@ -1,5 +1,5 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
+/design-assets
 # dependencies
 /node_modules
 /python/.venv-whisperx
@@ -16,6 +16,7 @@
 
 # next.js
 /.next/
+/.next-standalone/
 /out/
 
 # production
@@ -33,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -54,3 +56,10 @@ AGENTS.md
 __pycache__/
 *.pyc
 *.pyo
+# unified Python environment (python/.venv)
+/python/.venv/
+
+# Tauri
+/src-tauri/target/
+/src-tauri/binaries/
+/src-tauri/gen/
