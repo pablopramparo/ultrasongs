@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  Generate <a href="https://ultrastar-deluxe.org/">Ultrastar Deluxe</a> song files from an audio or video file and its lyrics.<br>
+  Generate <a href="https://ultrastar-es.org/es">Ultrastar Deluxe</a> song files from an audio or video file and its lyrics.<br>
   Everything runs on your own machine — no external AI services.
 </p>
 
