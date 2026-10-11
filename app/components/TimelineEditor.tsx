@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { EditorNote } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
+import { useI18n } from "@/app/i18n/I18nProvider";
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const KEYS_W = 68;
@@ -33,6 +34,7 @@ interface Props {
 export default function TimelineEditor({
   initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, onClose,
 }: Props) {
+  const { t } = useI18n();
   const [notes, setNotes] = useState<EditorNote[]>(initialNotes);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pxPerSec, setPxPerSec] = useState(120);
@@ -40,6 +42,9 @@ export default function TimelineEditor({
   const [playheadSec, setPlayheadSec] = useState(0);
   const [isNotePlaying, setIsNotePlaying] = useState(false);
   const [addMode, setAddMode] = useState(false);
+  // Mixer: music is the audio element's volume; notes are synth tones (0 = off).
+  const [musicVol, setMusicVol] = useState(1);
+  const [noteVol, setNoteVol] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isMicTracePlaying, setIsMicTracePlaying] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
@@ -210,7 +215,7 @@ export default function TimelineEditor({
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, [isMicTracePlaying, isPlaying, isNotePlaying, micTrace, playheadSec, stopMicTracePlay, stopNotePlay]);
+  }, [isMicTracePlaying, isPlaying, isNotePlaying, micTrace, notes, playheadSec, stopMicTracePlay, stopNotePlay]);
 
   const togglePlay = useCallback(() => {
     if (isNotePlaying) stopNotePlay();
@@ -236,6 +241,65 @@ export default function TimelineEditor({
       rafRef.current = requestAnimationFrame(tick);
     }
   }, [isPlaying, isNotePlaying, stopNotePlay]);
+
+  // ── Song + notes together ─────────────────────────────────────────────────
+  // While the song plays with "Notas" on, schedule synth tones on a separate AudioContext,
+  // aligned to the audio element's current time. Re-runs only on play/pause/checkbox, so
+  // note edits made mid-playback take effect the next time playback starts.
+  const mixNotesRef = useRef<EditorNote[]>(notes);
+  useEffect(() => { mixNotesRef.current = notes; }, [notes]);
+  const noteMasterRef = useRef<GainNode | null>(null);
+  const noteVolRef = useRef(noteVol);
+  useEffect(() => {
+    noteVolRef.current = noteVol;
+    if (noteMasterRef.current) noteMasterRef.current.gain.value = noteVol;
+  }, [noteVol]);
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = musicVol;
+  }, [musicVol]);
+
+  const notesAudible = noteVol > 0;
+
+  useEffect(() => {
+    if (!isPlaying || !notesAudible) return;
+    const a = audioRef.current;
+    if (!a) return;
+
+    const ctx = new AudioContext();
+    const offset = a.currentTime;
+    const master = ctx.createGain();
+    master.gain.value = noteVolRef.current;
+    master.connect(ctx.destination);
+    noteMasterRef.current = master;
+
+    for (const note of mixNotesRef.current) {
+      const dur = note.durationSec;
+      const startDelay = note.startSec - offset;
+      if (startDelay + dur < 0) continue;
+      // A note already under way when playback starts is clipped to its remaining part.
+      const scheduleAt = ctx.currentTime + Math.max(0, startDelay);
+      const remaining = startDelay < 0 ? dur + startDelay : dur;
+      if (remaining <= 0.02) continue;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 440 * Math.pow(2, (note.pitch - 69) / 12);
+      osc.connect(gain);
+      gain.connect(master);
+      const release = Math.min(0.08, remaining * 0.15);
+      gain.gain.setValueAtTime(0, scheduleAt);
+      gain.gain.linearRampToValueAtTime(0.25, scheduleAt + 0.02);
+      gain.gain.setValueAtTime(0.25, scheduleAt + remaining - release);
+      gain.gain.exponentialRampToValueAtTime(0.001, scheduleAt + remaining);
+      osc.start(scheduleAt);
+      osc.stop(scheduleAt + remaining + 0.05);
+    }
+
+    return () => {
+      noteMasterRef.current = null;
+      ctx.close().catch(() => {});
+    };
+  }, [isPlaying, notesAudible]);
 
   const toggleNotePlay = useCallback(() => {
     if (isNotePlaying) { stopNotePlay(); return; }
@@ -634,7 +698,7 @@ export default function TimelineEditor({
         </span>
         <div className="flex shrink-0 items-center gap-2">
           <label className="flex items-center gap-1 text-xs text-zinc-400">
-            <span>Zoom</span>
+            <span>{t("editor.zoom")}</span>
             <input
               type="range" min={40} max={400} step={10} value={pxPerSec}
               onChange={(e) => setPxPerSec(Number(e.target.value))}
@@ -651,11 +715,11 @@ export default function TimelineEditor({
                   : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
               }`}
             >
-              🎤 {micEnabled ? (micLabel ? micLabel.split("(")[0].trim() : "Mic on") : "Mic"}
+              🎤 {micEnabled ? (micLabel ? micLabel.split("(")[0].trim() : t("editor.micOn")) : t("editor.mic")}
             </button>
             {micEnabled && (
-              <label className="flex items-center gap-1 text-xs text-zinc-400" title="Umbral de volumen — subí para ignorar más ruido ambiente">
-                <span>Sens</span>
+              <label className="flex items-center gap-1 text-xs text-zinc-400" title={t("editor.micSensitivityTitle")}>
+                <span>{t("editor.micSensitivity")}</span>
                 <input
                   type="range" min={0.005} max={0.08} step={0.005} value={micThreshold}
                   onChange={(e) => setMicThreshold(Number(e.target.value))}
@@ -668,20 +732,20 @@ export default function TimelineEditor({
                 <button
                   onClick={() => setMicOctaveShift((s) => Math.max(-2, s - 1))}
                   className="rounded border border-zinc-300 px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                >↓8va</button>
+                >{t("editor.octaveDown")}</button>
                 <span className="w-6 text-center text-zinc-400">
                   {micOctaveShift > 0 ? `+${micOctaveShift}` : micOctaveShift === 0 ? "0" : micOctaveShift}
                 </span>
                 <button
                   onClick={() => setMicOctaveShift((s) => Math.min(2, s + 1))}
                   className="rounded border border-zinc-300 px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                >↑8va</button>
+                >{t("editor.octaveUp")}</button>
               </div>
             )}
             {micEnabled && (
               <button
                 onClick={toggleMicPlay}
-                title="Escuchar pitch del mic en tiempo real"
+                title={t("editor.micListenTitle")}
                 className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
                   micPlayEnabled
                     ? "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400"
@@ -705,7 +769,7 @@ export default function TimelineEditor({
               >
                 {micDevices.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Micrófono ${d.deviceId.slice(0, 6)}`}
+                    {d.label || t("editor.micDevice", { id: d.deviceId.slice(0, 6) })}
                   </option>
                 ))}
               </select>
@@ -721,14 +785,14 @@ export default function TimelineEditor({
                 "bg-zinc-600 text-white hover:bg-zinc-700"
               }`}
             >
-              {saveStatus === "saving" ? "Guardando…" : saveStatus === "saved" ? "Guardado ✓" : saveStatus === "error" ? "Error ✗" : "💾 Guardar"}
+              {saveStatus === "saving" ? t("editor.saving") : saveStatus === "saved" ? t("editor.saved") : saveStatus === "error" ? t("editor.error") : `💾 ${t("editor.save")}`}
             </button>
           )}
           <button
             onClick={() => onExport(notes, bpm, gap)}
             className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
           >
-            Export
+            {t("editor.export")}
           </button>
           {onClose && (
             <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">✕</button>
@@ -756,7 +820,7 @@ export default function TimelineEditor({
         </button>
         <button
           onClick={() => setAddMode((v) => !v)}
-          title="Modo agregar nota — click en el grid para insertar"
+          title={t("editor.addNoteTitle")}
           className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold transition-colors ${
             addMode
               ? "bg-emerald-500 text-white hover:bg-emerald-600"
@@ -767,7 +831,7 @@ export default function TimelineEditor({
         </button>
         <button
           onClick={toggleNotePlay}
-          title="Reproducir solo notas (sin audio)"
+          title={t("editor.notesOnlyTitle")}
           className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors ${
             isNotePlaying
               ? "bg-amber-500 text-white hover:bg-amber-600"
@@ -776,6 +840,30 @@ export default function TimelineEditor({
         >
           ♪
         </button>
+        <label
+          title={t("editor.musicTitle")}
+          className="flex select-none items-center gap-1 text-zinc-600 dark:text-zinc-300"
+        >
+          {t("editor.music")}
+          <input
+            type="range" min={0} max={1} step={0.05}
+            value={musicVol}
+            onChange={(e) => setMusicVol(Number(e.target.value))}
+            className="h-1 w-20 accent-blue-600"
+          />
+        </label>
+        <label
+          title={t("editor.notesTitle")}
+          className="flex select-none items-center gap-1 text-zinc-600 dark:text-zinc-300"
+        >
+          {t("editor.notes")}
+          <input
+            type="range" min={0} max={1} step={0.05}
+            value={noteVol}
+            onChange={(e) => setNoteVol(Number(e.target.value))}
+            className="h-1 w-20 accent-amber-500"
+          />
+        </label>
         <span className="font-mono text-zinc-500">{playheadSec.toFixed(2)} s</span>
 
         {/* Selected note controls */}
@@ -790,22 +878,22 @@ export default function TimelineEditor({
                   prev.map((n) => n.id === selectedId ? { ...n, syllable: e.target.value } : n)
                 )
               }
-              placeholder="syllable"
+              placeholder={t("editor.syllable")}
               className="w-24 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
             />
             <button
               onClick={splitSelected}
-              title="Split note in half (S)"
+              title={t("editor.splitTitle")}
               className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
             >
-              Split (S)
+              {t("editor.split")}
             </button>
             <button
               onClick={() => { setNotes((prev) => prev.filter((n) => n.id !== selectedId)); setSelectedId(null); }}
-              title="Delete note (Del)"
+              title={t("editor.deleteTitle")}
               className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
             >
-              Delete
+              {t("editor.delete")}
             </button>
             <select
               value={selectedNote.type}
@@ -816,8 +904,8 @@ export default function TimelineEditor({
               }
               className="rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
             >
-              <option value=":">Normal</option>
-              <option value="*">Golden</option>
+              <option value=":">{t("editor.noteNormal")}</option>
+              <option value="*">{t("editor.noteGolden")}</option>
             </select>
           </>
         )}
@@ -830,7 +918,7 @@ export default function TimelineEditor({
         )}
         {micTrace.length > 0 && (
           <>
-            <span className="text-xs text-zinc-400">{micTrace.length} pts</span>
+            <span className="text-xs text-zinc-400">{t("editor.points", { n: micTrace.length })}</span>
             <button
               onClick={toggleMicTracePlay}
               className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
@@ -845,18 +933,18 @@ export default function TimelineEditor({
               onClick={applyMicTrace}
               className="rounded bg-green-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-green-700"
             >
-              Aplicar mic
+              {t("editor.applyMic")}
             </button>
             <button
               onClick={() => { setMicTrace([]); micPendingRef.current = []; }}
               className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
             >
-              Limpiar
+              {t("editor.clear")}
             </button>
           </>
         )}
         <span className="ml-auto text-zinc-400">
-          Drag note · right edge=resize · dbl-click empty=add · S=split · Del=remove
+          {t("editor.help")}
         </span>
       </div>
 
