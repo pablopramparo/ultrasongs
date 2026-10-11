@@ -1,6 +1,8 @@
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import MusicTempo from "music-tempo";
+import { existsSync } from "fs";
+import type { EditorNote } from "./editorNote";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -27,6 +29,47 @@ export interface UltrastarMeta {
  */
 export function msToBeats(ms: number, bpm: number, gap: number): number {
   return Math.round(((ms - gap) / 1000) * (bpm / 60) * 4);
+}
+
+/**
+ * Silence between two notes (seconds) from which a new lyric line starts. Editor notes carry no
+ * line information, so breaks are inferred from pauses; 0.4 s matched the lyric line count of
+ * the songs checked.
+ */
+const LINE_BREAK_GAP_SEC = 0.4;
+
+/**
+ * Converts timeline-editor notes (seconds) to Ultrastar notes (beats), keeping notes from
+ * overlapping and inserting a line break ("-") wherever a pause of `breakGapSec` or more separates
+ * two notes.
+ */
+export function editorNotesToUltrastar(
+  notes: EditorNote[],
+  bpm: number,
+  gap: number,
+  breakGapSec = LINE_BREAK_GAP_SEC
+): UltrastarNote[] {
+  const out: UltrastarNote[] = [];
+  let prevEnd = -1;
+  let prevEndSec = -1;
+  for (const en of notes) {
+    const startBeat = msToBeats(en.startSec * 1000, bpm, gap);
+    const endBeat = msToBeats((en.startSec + en.durationSec) * 1000, bpm, gap);
+    const duration = Math.max(1, endBeat - startBeat);
+
+    if (prevEnd >= 0 && en.startSec - prevEndSec >= breakGapSec) {
+      // Same placement as the auto mode: 4 beats before the next note, never before the last one ends.
+      const breakBeat = Math.max(prevEnd + 1, startBeat - 4);
+      out.push({ type: "-", startBeat: breakBeat, duration: 0, pitch: 0, syllable: "" });
+      prevEnd = breakBeat;
+    }
+
+    const adjStart = prevEnd >= 0 ? Math.max(startBeat, prevEnd + 1) : startBeat;
+    prevEndSec = en.startSec + en.durationSec;
+    out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
+    prevEnd = adjStart + duration;
+  }
+  return out;
 }
 
 export function buildUltrastarTxt(notes: UltrastarNote[], meta: UltrastarMeta): string {
@@ -75,6 +118,9 @@ function extractPcm(mp3Path: string, sampleRate = 44100): Promise<Float32Array> 
   });
 }
 
+/** BPM used when tempo detection fails outright. */
+const FALLBACK_BPM = 120;
+
 /** Lowest BPM we emit — UltraStar beats are 1/4 of a musical beat, so 300 BPM = 20 steps/s (50 ms). */
 const MIN_ULTRASTAR_BPM = 300;
 
@@ -95,11 +141,32 @@ export function toFineBpm(bpm: number): number {
  * Returns { bpm, beats } where beats are timestamps in seconds.
  */
 export async function detectBpm(mp3Path: string): Promise<{ bpm: number; beats: number[] }> {
-  const samples = await extractPcm(mp3Path);
-  // MusicTempo expects a plain Array or Float32Array of non-interleaved mono float32 PCM
-  const mt = new MusicTempo(samples);
-  return { bpm: toFineBpm(parseFloat(String(mt.tempo))), beats: mt.beats };
+  // The full mix first; some tracks only yield a tempo from the Demucs vocals stem.
+  const vocalsPath = mp3Path.replace(/\.mp3$/i, "_vocals.mp3");
+  const candidates = vocalsPath !== mp3Path && existsSync(vocalsPath) ? [mp3Path, vocalsPath] : [mp3Path];
+
+  for (const file of candidates) {
+    const samples = await extractPcm(file);
+    // music-tempo throws bare strings ("Tempo extraction failed", "Fail to find peaks"…) on
+    // material it can't track. Retry with a looser peak threshold before moving on.
+    const attempts: Record<string, number>[] = [{}, { peakThreshold: 0.15 }, { peakThreshold: 0.05, decayRate: 0.9 }];
+    for (const opts of attempts) {
+      try {
+        // MusicTempo expects a plain Array or Float32Array of non-interleaved mono float32 PCM
+        const mt = new MusicTempo(samples, opts);
+        const tempo = parseFloat(String(mt.tempo));
+        if (Number.isFinite(tempo) && tempo > 0) return { bpm: toFineBpm(tempo), beats: mt.beats };
+      } catch {
+        // try next set of options
+      }
+    }
+  }
+
+  // BPM is only a time unit in UltraStar (see toFineBpm), so a default keeps note timing correct.
+  console.warn("[detectBpm] tempo detection failed, falling back to", FALLBACK_BPM, "BPM");
+  return { bpm: toFineBpm(FALLBACK_BPM), beats: [] };
 }
+
 
 export interface ParsedUltrastar {
   title: string;
