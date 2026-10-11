@@ -91,3 +91,33 @@ body {
     @apply text-xs font-semibold uppercase tracking-wider text-zinc-400;
   }
 }
+
+/* Themed range input used by the media player (fill is painted via inline gradient) */
+.player-range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  cursor: pointer;
+  outline: none;
+}
+.player-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+.player-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  border: 2px solid #3b82f6;
+}
+.player-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.4);
+}

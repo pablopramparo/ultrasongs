@@ -4,6 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import SourceSelector from "./components/SourceSelector";
 import SetupScreen from "./components/SetupScreen";
 import SettingsPanel from "./components/SettingsPanel";
+import MediaPlayer from "./components/MediaPlayer";
+import Modal from "./components/Modal";
 import { useI18n } from "./i18n/I18nProvider";
 import type { MessageKey } from "./i18n";
 import type { YoutubeResult } from "./components/YoutubeInput";
@@ -79,26 +81,6 @@ export default function Home() {
   const uploadRef = useRef<UploadResult | null>(null);
   const transcribeRef = useRef<TranscribeResult | null>(null);
   const prevDownloadUrl = useRef<string | null>(null);
-  const infoAudioRef = useRef<HTMLAudioElement | null>(null);
-  const infoVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Sync info-card video to audio player
-  useEffect(() => {
-    const audio = infoAudioRef.current;
-    const video = infoVideoRef.current;
-    if (!audio || !video) return;
-    const onPlay = () => { video.currentTime = audio.currentTime; video.play().catch(() => {}); };
-    const onPause = () => video.pause();
-    const onSeeked = () => { video.currentTime = audio.currentTime; };
-    audio.addEventListener("play", onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("seeked", onSeeked);
-    return () => {
-      audio.removeEventListener("play", onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("seeked", onSeeked);
-    };
-  }, [transcribed, audioUrl, videoUrl]);
 
   // Elapsed timer — runs during transcribing phase
   useEffect(() => {
@@ -579,7 +561,7 @@ export default function Home() {
       />
     {/* Left padding matches sidebar width (w-64=16rem open, w-10=2.5rem closed) */}
     <div className="flex flex-1 flex-col min-w-0 pl-64">
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-12">
+    <div className={`mx-auto flex w-full flex-col gap-6 px-4 py-12 ${transcribed && !settingsOpen ? "max-w-5xl" : "max-w-2xl"}`}>
 
       {settingsOpen && (
         <SettingsPanel
@@ -685,39 +667,35 @@ export default function Home() {
         </section>
       )}
 
-      {/* ── MODE B: song ready — info card + actions ── */}
+      {/* ── MODE B: song ready ── */}
       {!settingsOpen && transcribed && (
-        <section className="flex flex-col gap-3">
-          {/* Song info card */}
-          <div className="card flex flex-col gap-3 p-5">
-            <div>
-              <p className="text-xl font-semibold tracking-tight text-zinc-50">{title}</p>
-              <p className="text-sm text-zinc-400">{artist}</p>
-            </div>
+        <section className="flex flex-col gap-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{title}</h1>
+            <p className="text-sm text-zinc-400">{artist}</p>
+          </div>
 
-            {videoUrl && (
-              <video
-                ref={infoVideoRef}
-                src={videoUrl}
-                muted
-                className="w-full rounded-lg"
-                style={{ maxHeight: "240px" }}
-              />
-            )}
-
+          {/* Player and lyrics side by side on wide windows, stacked on narrow ones */}
+          <div className={`grid gap-4 ${lyrics && audioUrl ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}>
             {audioUrl && (
-              <audio ref={infoAudioRef} src={audioUrl} controls className="w-full" />
+              <div className="card p-4">
+                <MediaPlayer key={audioUrl} audioUrl={audioUrl} videoUrl={videoUrl} />
+              </div>
             )}
-
             {lyrics && (
-              <pre className="max-h-48 overflow-y-auto rounded-lg bg-zinc-50 px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300">
-                {lyrics}
-              </pre>
+              <div className="card relative p-4 lg:min-h-[16rem]">
+                <div className="lg:absolute lg:inset-4 lg:flex lg:flex-col">
+                  <h3 className="section-label mb-3">{t("song.lyrics")}</h3>
+                  <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap font-mono text-sm leading-relaxed text-zinc-300 lg:min-h-0 lg:max-h-none lg:flex-1">
+                    {lyrics}
+                  </pre>
+                </div>
+              </div>
             )}
           </div>
 
           {/* Primary actions */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <GenerateButton phase={phase} onClick={handleGenerate} disabled={!canAct} />
             <button
               onClick={handleOpenEditor}
@@ -731,45 +709,40 @@ export default function Home() {
               )}
               {t("song.editTimeline")}
             </button>
+            <button onClick={() => setReprocessOpen(true)} className="btn btn-dashed w-full font-medium">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {t("song.modify")}
+            </button>
           </div>
 
           <DownloadPanel url={downloadUrl} title={title} error={error} savedTo={savedTo} saveError={saveError} />
 
-          {/* Re-process expander */}
-          <button
-            onClick={() => setReprocessOpen((v) => !v)}
-            className="btn btn-dashed w-full font-medium"
-          >
-            <svg className={`h-4 w-4 transition-transform ${reprocessOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-            {t("song.modify")}
-          </button>
+          {/* Modify / re-process, in a dialog so the player and lyrics keep the whole page */}
+          <Modal open={reprocessOpen} title={t("song.modify")} onClose={() => setReprocessOpen(false)}>
+            <div className="flex flex-col gap-2">
+              <h3 className="section-label">{t("section.audio")}</h3>
+              <SourceSelector
+                onFile={handleFile}
+                onVideoFile={handleVideoFile}
+                onYoutube={handleYoutube}
+                disabled={busy}
+                filename={filename || undefined}
+                videoFilename={videoFilename || undefined}
+              />
+            </div>
 
-          {/* Collapsible re-process form */}
-          {reprocessOpen && (
-            <div className="card flex flex-col gap-4 p-5">
-              <div className="flex flex-col gap-2">
-                <h3 className="section-label">{t("section.audio")}</h3>
-                <SourceSelector
-                  onFile={handleFile}
-                  onVideoFile={handleVideoFile}
-                  onYoutube={handleYoutube}
-                  disabled={busy}
-                  filename={filename || undefined}
-                  videoFilename={videoFilename || undefined}
-                />
-              </div>
+            <div className="flex flex-col gap-2">
+              <h3 className="section-label">{t("section.infoLyrics")}</h3>
+              <LyricsInput
+                title={title} artist={artist} lyrics={lyrics}
+                onTitle={setTitle} onArtist={setArtist} onLyrics={setLyrics}
+                disabled={busy}
+              />
+            </div>
 
-              <div className="flex flex-col gap-2">
-                <h3 className="section-label">{t("section.infoLyrics")}</h3>
-                <LyricsInput
-                  title={title} artist={artist} lyrics={lyrics}
-                  onTitle={setTitle} onArtist={setArtist} onLyrics={setLyrics}
-                  disabled={busy}
-                />
-              </div>
-
+            <div className="grid gap-2 sm:grid-cols-2">
               <button
                 onClick={handleSaveDraft}
                 disabled={saving}
@@ -786,28 +759,26 @@ export default function Home() {
               <button
                 onClick={handleProcess}
                 disabled={!canProcess}
-                className="btn btn-primary w-full py-3"
+                className="btn btn-primary w-full"
               >
                 {busy ? <><Spinner />{phase === "uploading" ? t("process.uploading") : t("process.processing")}</> : t("process.reprocess")}
               </button>
-
-              {(phase === "uploading" || phase === "transcribing") && currentStage && (
-                <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5">
-                  <Spinner />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">{currentStage}</span>
-                    {phase === "transcribing" && transcribeElapsed > 0 && (
-                      <span className="text-[10px] text-zinc-400">{t("process.elapsed", { time: fmtTime(transcribeElapsed) })}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              )}
             </div>
-          )}
+
+            {(phase === "uploading" || phase === "transcribing") && currentStage && (
+              <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                <Spinner />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-xs font-medium text-zinc-200">{currentStage}</span>
+                  {phase === "transcribing" && transcribeElapsed > 0 && (
+                    <span className="text-xs text-zinc-500">{t("process.elapsed", { time: fmtTime(transcribeElapsed) })}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-red-400">{error}</p>}
+          </Modal>
         </section>
       )}
     </div>

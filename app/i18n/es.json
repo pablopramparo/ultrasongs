@@ -199,5 +199,20 @@
   "setup.err.badArchive": "El Python descargado no tiene el formato esperado",
   "setup.err.missingLock": "Falta el archivo {path}",
   "setup.err.processExit": "{name} terminó con código {code}\n{tail}",
-  "api.badRequest": "Solicitud inválida"
+  "api.badRequest": "Solicitud inválida",
+  "player.play": "Reproducir",
+  "player.pause": "Pausar",
+  "player.seek": "Posición",
+  "player.mute": "Silenciar",
+  "player.unmute": "Activar sonido",
+  "player.volume": "Volumen",
+  "action.close": "Cerrar",
+  "song.lyrics": "Letra",
+  "sidebar.saveAll": "Guardar todos en Songs",
+  "sidebar.saveAllTitle": "Escribe cada borrador como carpeta en la carpeta de canciones",
+  "sidebar.saving": "Guardando…",
+  "sidebar.savedMany": "Guardadas en Songs: {n}",
+  "sidebar.confirmSaveAll": "Se guardarán todos los borradores ({n}) en:",
+  "sidebar.confirmSaveAllNote": "Las carpetas que no creó Ultrasongs no se tocan; las que ya creó se actualizan.",
+  "sidebar.confirmYes": "Sí, guardar todos"
 }
