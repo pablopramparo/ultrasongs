@@ -4,19 +4,31 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { EditorNote } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
+import RangeSlider from "./RangeSlider";
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const KEYS_W = 68;
-const PX_PITCH = 14;
+const PX_PITCH = 18;
 const MIN_PITCH = 36;    // C2
 const MAX_PITCH = 84;    // C6
 const ROLL_H = (MAX_PITCH - MIN_PITCH + 1) * PX_PITCH;
+const RULER_H = 28;
+/** Seconds between ruler labels; the first one that leaves enough room at the current zoom is used. */
+const RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60];
+/** Seconds between the faint lines drawn inside each labelled step. */
+const RULER_MINOR: Record<number, number> = { 0.5: 0.1, 1: 0.25, 2: 0.5, 5: 1, 10: 2, 15: 5, 30: 5, 60: 10 };
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const BLACK = new Set([1, 3, 6, 8, 10]);
 
 function noteName(p: number) { return `${NOTE_NAMES[p % 12]}${Math.floor(p / 12) - 1}`; }
 function isBlack(p: number) { return BLACK.has(p % 12); }
 function pitchToY(p: number) { return (MAX_PITCH - p) * PX_PITCH; }
+function fmtClock(sec: number, decimals = false) {
+  const s = Math.max(0, sec);
+  const m = Math.floor(s / 60);
+  const rest = s - m * 60;
+  return `${m}:${decimals ? rest.toFixed(2).padStart(5, "0") : String(Math.floor(rest)).padStart(2, "0")}`;
+}
 
 interface Props {
   initialNotes: EditorNote[];
@@ -58,6 +70,21 @@ export default function TimelineEditor({
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+  // Open with the notes in view: the pitch range is 4 octaves tall and the song may start late
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || didInitialScroll.current || initialNotes.length === 0) return;
+    didInitialScroll.current = true;
+    let lo = MAX_PITCH;
+    let hi = MIN_PITCH;
+    for (const n of initialNotes) {
+      lo = Math.min(lo, n.pitch);
+      hi = Math.max(hi, n.pitch);
+    }
+    el.scrollTop = Math.max(0, pitchToY((lo + hi) / 2) + RULER_H - el.clientHeight / 2);
+    el.scrollLeft = Math.max(0, initialNotes[0].startSec * pxPerSec - 120);
+  }, [initialNotes, pxPerSec]);
   const rafRef = useRef(0);
   const micRafRef = useRef(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -689,68 +716,76 @@ export default function TimelineEditor({
   const playheadX = KEYS_W + playheadSec * pxPerSec;
   const micY = micMidi !== null ? pitchToY(micMidi) + PX_PITCH / 2 : null;
 
+  // ── Time ruler ────────────────────────────────────────────────────────────
+  // Label spacing adapts to the zoom: the first step that leaves at least ~84 px between labels.
+  const labelStep = RULER_STEPS.find((s) => s * pxPerSec >= 84) ?? 60;
+  const minorStep = RULER_MINOR[labelStep] ?? labelStep / 4;
+  const rulerTicks: number[] = [];
+  for (let tm = 0; tm <= duration + 4; tm += labelStep) rulerTicks.push(Math.round(tm * 100) / 100);
+  const gridBackground = [
+    `repeating-linear-gradient(to right, rgba(148,163,184,0.18) 0, rgba(148,163,184,0.18) 1px, transparent 1px, transparent ${labelStep * pxPerSec}px)`,
+    `repeating-linear-gradient(to right, rgba(148,163,184,0.07) 0, rgba(148,163,184,0.07) 1px, transparent 1px, transparent ${minorStep * pxPerSec}px)`,
+  ].join(",");
+
+  const chip =
+    "rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700";
+  const squareBtn =
+    "flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors";
+
   return (
-    <div className="flex h-full flex-col rounded-xl border border-zinc-200 bg-white overflow-hidden dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="relative flex h-full flex-col overflow-hidden bg-zinc-950">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
-        <span className="truncate text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-          {title} — {artist}
-        </span>
-        <div className="flex shrink-0 items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-zinc-400">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2.5">
+        <div className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-zinc-50">{title}</span>
+          <span className="block truncate text-xs text-zinc-400">{artist}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-zinc-400">
             <span>{t("editor.zoom")}</span>
-            <input
-              type="range" min={40} max={400} step={10} value={pxPerSec}
-              onChange={(e) => setPxPerSec(Number(e.target.value))}
-              className="w-20 accent-blue-500"
+            <RangeSlider
+              value={pxPerSec} max={400} step={10}
+              onChange={(v) => setPxPerSec(Math.max(40, v))}
+              label={t("editor.zoom")} className="w-24"
             />
           </label>
-          <div className="flex items-center gap-1">
+
+          <div className="flex items-center gap-1.5">
             <button
               onClick={toggleMic}
               title={micLabel || undefined}
-              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                micEnabled
-                  ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400"
-                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-              }`}
+              className={`${chip} ${micEnabled ? "!border-green-700 !bg-green-950 !text-green-300" : ""}`}
             >
               🎤 {micEnabled ? (micLabel ? micLabel.split("(")[0].trim() : t("editor.micOn")) : t("editor.mic")}
             </button>
             {micEnabled && (
-              <label className="flex items-center gap-1 text-xs text-zinc-400" title={t("editor.micSensitivityTitle")}>
+              <label className="flex items-center gap-1.5 text-xs text-zinc-400" title={t("editor.micSensitivityTitle")}>
                 <span>{t("editor.micSensitivity")}</span>
-                <input
-                  type="range" min={0.005} max={0.08} step={0.005} value={micThreshold}
-                  onChange={(e) => setMicThreshold(Number(e.target.value))}
-                  className="w-16 accent-green-500"
+                <RangeSlider
+                  value={micThreshold} max={0.08} step={0.005}
+                  onChange={(v) => setMicThreshold(Math.max(0.005, v))}
+                  label={t("editor.micSensitivity")} color="#22c55e" className="w-16"
                 />
               </label>
             )}
             {micEnabled && (
               <div className="flex items-center gap-1 text-xs">
-                <button
-                  onClick={() => setMicOctaveShift((s) => Math.max(-2, s - 1))}
-                  className="rounded border border-zinc-300 px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                >{t("editor.octaveDown")}</button>
+                <button onClick={() => setMicOctaveShift((s) => Math.max(-2, s - 1))} className={chip}>
+                  {t("editor.octaveDown")}
+                </button>
                 <span className="w-6 text-center text-zinc-400">
-                  {micOctaveShift > 0 ? `+${micOctaveShift}` : micOctaveShift === 0 ? "0" : micOctaveShift}
+                  {micOctaveShift > 0 ? `+${micOctaveShift}` : micOctaveShift}
                 </span>
-                <button
-                  onClick={() => setMicOctaveShift((s) => Math.min(2, s + 1))}
-                  className="rounded border border-zinc-300 px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                >{t("editor.octaveUp")}</button>
+                <button onClick={() => setMicOctaveShift((s) => Math.min(2, s + 1))} className={chip}>
+                  {t("editor.octaveUp")}
+                </button>
               </div>
             )}
             {micEnabled && (
               <button
                 onClick={toggleMicPlay}
                 title={t("editor.micListenTitle")}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                  micPlayEnabled
-                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400"
-                    : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                }`}
+                className={`${chip} ${micPlayEnabled ? "!border-amber-700 !bg-amber-950 !text-amber-300" : ""}`}
               >
                 🔊
               </button>
@@ -765,7 +800,7 @@ export default function TimelineEditor({
                     try { await startMic(id); } catch { /* ignore */ }
                   }
                 }}
-                className="rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                className="max-w-40 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs text-zinc-200"
               >
                 {micDevices.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
@@ -775,101 +810,102 @@ export default function TimelineEditor({
               </select>
             )}
           </div>
+
           {draftId && (
             <button
               onClick={saveDraft}
               disabled={saveStatus === "saving"}
-              className={`rounded px-3 py-1 text-xs font-semibold transition-colors ${
-                saveStatus === "saved" ? "bg-green-600 text-white" :
-                saveStatus === "error" ? "bg-red-600 text-white" :
-                "bg-zinc-600 text-white hover:bg-zinc-700"
+              className={`btn !px-3 !py-1.5 text-xs ${
+                saveStatus === "saved"
+                  ? "bg-green-600 text-white"
+                  : saveStatus === "error"
+                  ? "bg-red-600 text-white"
+                  : "btn-secondary"
               }`}
             >
-              {saveStatus === "saving" ? t("editor.saving") : saveStatus === "saved" ? t("editor.saved") : saveStatus === "error" ? t("editor.error") : `💾 ${t("editor.save")}`}
+              {saveStatus === "saving" ? t("editor.saving") : saveStatus === "saved" ? t("editor.saved") : saveStatus === "error" ? t("editor.error") : t("editor.save")}
             </button>
           )}
-          <button
-            onClick={() => onExport(notes, bpm, gap)}
-            className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-          >
+          <button onClick={() => onExport(notes, bpm, gap)} className="btn btn-primary !px-3 !py-1.5 text-xs">
             {t("editor.export")}
           </button>
           {onClose && (
-            <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">✕</button>
+            <button
+              onClick={onClose}
+              aria-label={t("action.close")}
+              className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           )}
         </div>
       </div>
 
       {/* ── Transport ── */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-zinc-100 px-3 py-1.5 text-xs dark:border-zinc-800">
-        {/* Play / time */}
-        <button
-          onClick={togglePlay}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700"
-          title="Space"
-        >
-          {isPlaying ? (
-            <svg viewBox="0 0 10 10" className="h-3 w-3" fill="currentColor">
-              <rect x="1" y="1" width="3" height="8" /><rect x="6" y="1" width="3" height="8" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 10 10" className="h-3 w-3" fill="currentColor">
-              <polygon points="2,1 9,5 2,9" />
-            </svg>
-          )}
-        </button>
-        <button
-          onClick={() => setAddMode((v) => !v)}
-          title={t("editor.addNoteTitle")}
-          className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-            addMode
-              ? "bg-emerald-500 text-white hover:bg-emerald-600"
-              : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
-          }`}
-        >
-          +
-        </button>
-        <button
-          onClick={toggleNotePlay}
-          title={t("editor.notesOnlyTitle")}
-          className={`flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors ${
-            isNotePlaying
-              ? "bg-amber-500 text-white hover:bg-amber-600"
-              : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"
-          }`}
-        >
-          ♪
-        </button>
-        <label
-          title={t("editor.musicTitle")}
-          className="flex select-none items-center gap-1 text-zinc-600 dark:text-zinc-300"
-        >
-          {t("editor.music")}
-          <input
-            type="range" min={0} max={1} step={0.05}
-            value={musicVol}
-            onChange={(e) => setMusicVol(Number(e.target.value))}
-            className="h-1 w-20 accent-blue-600"
-          />
-        </label>
-        <label
-          title={t("editor.notesTitle")}
-          className="flex select-none items-center gap-1 text-zinc-600 dark:text-zinc-300"
-        >
-          {t("editor.notes")}
-          <input
-            type="range" min={0} max={1} step={0.05}
-            value={noteVol}
-            onChange={(e) => setNoteVol(Number(e.target.value))}
-            className="h-1 w-20 accent-amber-500"
-          />
-        </label>
-        <span className="font-mono text-zinc-500">{playheadSec.toFixed(2)} s</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-800 bg-zinc-900/60 px-4 py-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={togglePlay}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-500"
+            title="Space"
+          >
+            {isPlaying ? (
+              <svg viewBox="0 0 10 10" className="h-3.5 w-3.5" fill="currentColor">
+                <rect x="1" y="1" width="3" height="8" rx="0.5" /><rect x="6" y="1" width="3" height="8" rx="0.5" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 10 10" className="h-3.5 w-3.5" fill="currentColor">
+                <polygon points="2.2,1 9,5 2.2,9" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={() => setAddMode((v) => !v)}
+            title={t("editor.addNoteTitle")}
+            className={`${squareBtn} text-base font-bold ${
+              addMode ? "bg-emerald-500 text-white hover:bg-emerald-400" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            }`}
+          >
+            +
+          </button>
+          <button
+            onClick={toggleNotePlay}
+            title={t("editor.notesOnlyTitle")}
+            className={`${squareBtn} ${
+              isNotePlaying ? "bg-amber-500 text-white hover:bg-amber-400" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            }`}
+          >
+            ♪
+          </button>
+        </div>
 
-        {/* Selected note controls */}
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="font-mono text-sm tabular-nums text-zinc-100">
+            {fmtClock(playheadSec, true)} <span className="text-zinc-500">/ {fmtClock(duration)}</span>
+          </span>
+          <RangeSlider
+            value={Math.min(playheadSec, duration)} max={duration} step={0.01}
+            onChange={seekTo} label={t("player.seek")} className="w-44"
+          />
+        </div>
+
+        <div className="flex items-center gap-4">
+          <label title={t("editor.musicTitle")} className="flex select-none items-center gap-2 text-zinc-300">
+            {t("editor.music")}
+            <RangeSlider value={musicVol} max={1} step={0.05} onChange={setMusicVol} label={t("editor.music")} className="w-20" />
+          </label>
+          <label title={t("editor.notesTitle")} className="flex select-none items-center gap-2 text-zinc-300">
+            <span className="h-2 w-2 rounded-full bg-amber-500" />
+            {t("editor.notes")}
+            <RangeSlider value={noteVol} max={1} step={0.05} onChange={setNoteVol} label={t("editor.notes")} color="#f59e0b" className="w-20" />
+          </label>
+        </div>
+
+        {/* Selected note */}
         {selectedNote && (
-          <>
-            <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+          <div className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1">
             <input
               ref={syllableInputRef}
               value={selectedNote.syllable}
@@ -879,21 +915,10 @@ export default function TimelineEditor({
                 )
               }
               placeholder={t("editor.syllable")}
-              className="w-24 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-800 focus:outline-none focus:ring-1 focus:ring-blue-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+              className="w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 focus:border-blue-500 focus:outline-none"
             />
-            <button
-              onClick={splitSelected}
-              title={t("editor.splitTitle")}
-              className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-            >
+            <button onClick={splitSelected} title={t("editor.splitTitle")} className={chip}>
               {t("editor.split")}
-            </button>
-            <button
-              onClick={() => { setNotes((prev) => prev.filter((n) => n.id !== selectedId)); setSelectedId(null); }}
-              title={t("editor.deleteTitle")}
-              className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
-            >
-              {t("editor.delete")}
             </button>
             <select
               value={selectedNote.type}
@@ -902,61 +927,81 @@ export default function TimelineEditor({
                   prev.map((n) => n.id === selectedId ? { ...n, type: e.target.value as ":" | "*" } : n)
                 )
               }
-              className="rounded border border-zinc-300 bg-white px-1 py-0.5 text-xs dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs text-zinc-200"
             >
               <option value=":">{t("editor.noteNormal")}</option>
               <option value="*">{t("editor.noteGolden")}</option>
             </select>
-          </>
+            <button
+              onClick={() => { setNotes((prev) => prev.filter((n) => n.id !== selectedId)); setSelectedId(null); }}
+              title={t("editor.deleteTitle")}
+              className="rounded-md border border-red-900 px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-950"
+            >
+              {t("editor.delete")}
+            </button>
+          </div>
         )}
 
         {micEnabled && (
-          <span className="text-green-600 dark:text-green-400">
+          <span className="text-green-400">
             🎤 {micMidi !== null ? noteName(micMidi) : "—"}
             {isPlaying && <span className="ml-1 animate-pulse text-green-500">●</span>}
           </span>
         )}
         {micTrace.length > 0 && (
-          <>
-            <span className="text-xs text-zinc-400">{t("editor.points", { n: micTrace.length })}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-400">{t("editor.points", { n: micTrace.length })}</span>
             <button
               onClick={toggleMicTracePlay}
-              className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
-                isMicTracePlaying
-                  ? "bg-amber-500 text-white hover:bg-amber-600"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-              }`}
+              className={`${chip} ${isMicTracePlaying ? "!border-amber-600 !bg-amber-500 !text-white" : ""}`}
             >
               {isMicTracePlaying ? "■ Mic" : "♪ Mic"}
             </button>
-            <button
-              onClick={applyMicTrace}
-              className="rounded bg-green-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-green-700"
-            >
+            <button onClick={applyMicTrace} className="btn btn-primary !bg-green-600 hover:!bg-green-500 !px-2 !py-1 text-xs">
               {t("editor.applyMic")}
             </button>
-            <button
-              onClick={() => { setMicTrace([]); micPendingRef.current = []; }}
-              className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-            >
+            <button onClick={() => { setMicTrace([]); micPendingRef.current = []; }} className={chip}>
               {t("editor.clear")}
             </button>
-          </>
+          </div>
         )}
-        <span className="ml-auto text-zinc-400">
-          {t("editor.help")}
-        </span>
+
+        <span className="ml-auto hidden text-zinc-500 xl:block">{t("editor.help")}</span>
       </div>
 
-      {/* ── Video preview ── */}
-      {videoUrl && (
-        <div className="border-b border-zinc-200 bg-black dark:border-zinc-700">
-          <video ref={videoRef} src={videoUrl} muted className="mx-auto block max-h-48 w-full object-contain" />
-        </div>
-      )}
-
       {/* ── Piano roll ── */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-zinc-950">
+        {/* Time ruler: sticks to the top while the roll scrolls vertically */}
+        <div
+          className="sticky top-0 z-30 cursor-pointer select-none border-b border-zinc-800 bg-zinc-900"
+          style={{ width: totalW, height: RULER_H }}
+          onMouseDown={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            seekTo(Math.max(0, (e.clientX - rect.left - KEYS_W) / pxPerSecRef.current));
+          }}
+        >
+          <div
+            className="sticky left-0 z-10 border-r border-zinc-800 bg-zinc-900"
+            style={{ position: "sticky", left: 0, width: KEYS_W, height: "100%" }}
+          />
+          {rulerTicks.map((tm) => (
+            <div key={tm} style={{ position: "absolute", left: KEYS_W + tm * pxPerSec, top: 0, height: "100%", pointerEvents: "none" }}>
+              <div style={{ position: "absolute", left: 0, bottom: 0, width: 1, height: 10, background: "#475569" }} />
+              <span style={{ position: "absolute", left: 5, top: 4 }} className="font-mono text-[11px] text-zinc-400">
+                {fmtClock(tm, labelStep < 1)}
+              </span>
+            </div>
+          ))}
+          {/* Playhead marker */}
+          <div
+            style={{
+              position: "absolute", left: playheadX - 5, top: RULER_H - 9, width: 0, height: 0,
+              borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "8px solid #ef4444",
+              pointerEvents: "none",
+            }}
+          />
+        </div>
+
         <div style={{ width: totalW, height: ROLL_H, position: "relative" }}>
 
           {/* Piano keys */}
@@ -965,29 +1010,28 @@ export default function TimelineEditor({
               const p = MAX_PITCH - i;
               const black = isBlack(p);
               const highlighted = micMidi === p;
+              const isC = p % 12 === 0;
               return (
                 <div
                   key={p}
-                  style={{ position: "absolute", top: i * PX_PITCH, left: 0, width: KEYS_W - 2, height: PX_PITCH - 1 }}
-                  className={`flex items-center border-b text-[9px] select-none transition-colors ${
+                  style={{ position: "absolute", top: i * PX_PITCH, left: 0, width: KEYS_W - 1, height: PX_PITCH }}
+                  className={`flex items-center border-b border-r text-[10px] select-none transition-colors ${
                     highlighted
-                      ? "bg-green-400 text-white border-green-500"
+                      ? "border-green-500 bg-green-400 text-white"
                       : black
-                      ? "bg-zinc-700 text-zinc-400 border-zinc-600"
-                      : "bg-white text-zinc-400 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700"
+                      ? "border-zinc-800 bg-zinc-950 text-zinc-600"
+                      : isC
+                      ? "border-zinc-600 bg-zinc-700 font-semibold text-zinc-100"
+                      : "border-zinc-800 bg-zinc-800 text-zinc-400"
                   }`}
                 >
-                  {!black && (
-                    <span className="ml-1">
-                      {p % 12 === 0 ? noteName(p) : NOTE_NAMES[p % 12]}
-                    </span>
-                  )}
+                  {!black && <span className="ml-2">{isC ? noteName(p) : NOTE_NAMES[p % 12]}</span>}
                 </div>
               );
             })}
           </div>
 
-          {/* Grid rows + beat lines */}
+          {/* Grid rows + time lines */}
           <div
             style={{ position: "absolute", left: KEYS_W, top: 0, right: 0, height: ROLL_H, zIndex: 1, cursor: addMode ? "crosshair" : "default" }}
             onClick={handleGridClick}
@@ -998,22 +1042,11 @@ export default function TimelineEditor({
                 <div
                   key={p}
                   style={{ position: "absolute", top: i * PX_PITCH, left: 0, right: 0, height: PX_PITCH }}
-                  className={isBlack(p) ? "bg-zinc-100 dark:bg-zinc-800/60" : "bg-white dark:bg-zinc-900"}
+                  className={`${isBlack(p) ? "bg-zinc-950" : "bg-zinc-900"} ${p % 12 === 0 ? "border-b border-zinc-700" : ""}`}
                 />
               );
             })}
-            {Array.from({ length: Math.ceil((duration * bpm) / 60) + 4 }, (_, beat) => (
-              <div
-                key={beat}
-                style={{
-                  position: "absolute",
-                  left: (beat * 60) / bpm * pxPerSec,
-                  top: 0, width: 1, height: ROLL_H,
-                  background: beat % 4 === 0 ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.05)",
-                  zIndex: 2, pointerEvents: "none",
-                }}
-              />
-            ))}
+            <div style={{ position: "absolute", inset: 0, backgroundImage: gridBackground, zIndex: 2, pointerEvents: "none" }} />
           </div>
 
           {/* Mic trace dots */}
@@ -1046,10 +1079,13 @@ export default function TimelineEditor({
                   position: "absolute", left: x + 1, top: y + 2,
                   width: Math.max(w - 2, 8), height: PX_PITCH - 4,
                   zIndex: sel ? 30 : 10, cursor: "grab", userSelect: "none",
+                  background:
+                    note.type === "*"
+                      ? "linear-gradient(90deg, #f59e0b, #f97316)"
+                      : "linear-gradient(90deg, #3b82f6, #a855f7)",
+                  boxShadow: sel ? "0 0 0 2px #fff, 0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.45)",
                 }}
-                className={`flex items-center rounded text-[10px] font-bold text-white px-1 overflow-hidden whitespace-nowrap transition-shadow ${
-                  sel ? "ring-2 ring-white shadow-lg" : ""
-                } ${note.type === "*" ? "bg-amber-500 hover:bg-amber-400" : "bg-blue-500 hover:bg-blue-400"}`}
+                className="flex items-center overflow-hidden whitespace-nowrap rounded-md px-1.5 text-[11px] font-semibold text-white transition-[filter] hover:brightness-110"
                 onMouseDown={(e) => startDrag(e, note, "move")}
                 onClick={(e) => { e.stopPropagation(); playNotePreview(note.pitch, note.durationSec); }}
                 onDoubleClick={(e) => e.stopPropagation()}
@@ -1086,6 +1122,13 @@ export default function TimelineEditor({
           )}
         </div>
       </div>
+
+      {/* Video thumbnail, floating over the roll so it takes no layout space */}
+      {videoUrl && (
+        <div className="pointer-events-none absolute bottom-4 right-6 z-50 w-60 overflow-hidden rounded-lg border border-zinc-700 bg-black shadow-2xl shadow-black/60">
+          <video ref={videoRef} src={videoUrl} muted className="aspect-video w-full object-contain" />
+        </div>
+      )}
 
       <audio
         ref={audioRef}

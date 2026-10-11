@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useI18n } from "@/app/i18n/I18nProvider";
+import RangeSlider from "./RangeSlider";
 
 interface Props {
   audioUrl: string;
@@ -14,28 +15,6 @@ function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/** Slider whose filled part is drawn with a gradient, so it matches the app instead of the browser. */
-function Range({
-  value, max, step, onChange, label, className = "",
-}: {
-  value: number; max: number; step: number; onChange: (v: number) => void; label: string; className?: string;
-}) {
-  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
-  return (
-    <input
-      type="range"
-      min={0}
-      max={max || 1}
-      step={step}
-      value={value}
-      aria-label={label}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className={`player-range ${className}`}
-      style={{ background: `linear-gradient(to right, #3b82f6 ${pct}%, #252735 ${pct}%)` }}
-    />
-  );
 }
 
 /**
@@ -141,7 +120,7 @@ export default function MediaPlayer({ audioUrl, videoUrl }: Props) {
           {fmt(current)} / {fmt(duration)}
         </span>
 
-        <Range value={current} max={duration} step={0.1} onChange={seek} label={t("player.seek")} className="min-w-0 flex-1" />
+        <RangeSlider value={current} max={duration} step={0.1} onChange={seek} label={t("player.seek")} className="min-w-0 flex-1" />
 
         <button
           type="button"
@@ -158,7 +137,7 @@ export default function MediaPlayer({ audioUrl, videoUrl }: Props) {
             )}
           </svg>
         </button>
-        <Range value={muted ? 0 : volume} max={1} step={0.05} onChange={setVol} label={t("player.volume")} className="w-20 shrink-0" />
+        <RangeSlider value={muted ? 0 : volume} max={1} step={0.05} onChange={setVol} label={t("player.volume")} className="w-20 shrink-0" />
       </div>
     </div>
   );
