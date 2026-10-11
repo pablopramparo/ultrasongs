@@ -185,9 +185,21 @@ function matchLine(
   return { matched, searchStart: ss, lastMatchTime: lmt };
 }
 
+const SNAP_MIN_WORD_SEC = 0.12;   // below this per word the voiced stretch is too short to trust
+const SNAP_MAX_WORD_SEC = 1.0;    // don't let a snapped word sprawl over a long stretch
+
+/**
+ * Fills in timestamps for lyric words the transcription missed.
+ * Missing words that open the line of the next anchor are packed right before it, inside the
+ * voiced stretch after the last pause ("[No] one ever starts"); the rest is spread evenly.
+ * The mirror rule (words closing the previous anchor's line) is deliberately absent: lines
+ * with a long breath in the middle ("who to ... betray") made it place words seconds early.
+ */
 function interpolateMissing(
   matched: Array<WordTimestamp | null>,
-  lyricWords: string[]
+  lyricWords: string[],
+  lineOf: number[] = [],
+  pauses: Pause[] = []
 ): WordTimestamp[] {
   const result: Array<WordTimestamp> = matched.map((m, i) =>
     m ?? { word: lyricWords[i], start: -1, end: -1, midi: 60 }
@@ -228,15 +240,47 @@ function interpolateMissing(
 
     const tStart = result[a].end;
     const tEnd = result[b].start;
-    const duration = tEnd - tStart;
     const midiA = result[a].midi;
     const midiB = result[b].midi;
 
-    for (let k = 1; k < gap; k++) {
-      const frac = k / gap;
-      result[a + k].start = tStart + frac * duration;
-      result[a + k].end = tStart + ((k + 1) / gap) * duration;
-      result[a + k].midi = Math.round(midiA + frac * (midiB - midiA));
+    const lo = a + 1;     // first index still to place
+    let hi = b - 1;       // last index still to place
+    const restStart = tStart;
+    let restEnd = tEnd;
+    const inGap = pauses.filter((p) => p.start >= tStart - 1e-6 && p.end <= tEnd + 1e-6);
+
+    if (inGap.length > 0 && lineOf.length > 0) {
+      // Words that open the line of the next anchor: right before it, after the last pause.
+      let pre = b;
+      while (pre - 1 > a && lineOf[pre - 1] === lineOf[b]) pre--;
+      const nPre = b - pre;
+      const lastPause = inGap.reduce((best, p) => (p.end > best.end ? p : best));
+      if (nPre > 0) {
+        const from = Math.max(lastPause.end, tEnd - nPre * SNAP_MAX_WORD_SEC);
+        if (tEnd - from >= nPre * SNAP_MIN_WORD_SEC) {
+          const slot = (tEnd - from) / nPre;
+          for (let i = 0; i < nPre; i++) {
+            result[pre + i].start = from + i * slot;
+            result[pre + i].end = from + (i + 1) * slot;
+            result[pre + i].midi = midiB;
+          }
+          hi = pre - 1;
+          restEnd = lastPause.start;
+        }
+      }
+
+      if (restEnd <= restStart) restEnd = tEnd;
+    }
+
+    // Whatever is left (whole unmatched lines, or no usable pause): spread evenly.
+    const rest = hi - lo + 1;
+    const restDuration = restEnd - restStart;
+    for (let j = 1; j <= rest; j++) {
+      const idx = lo + j - 1;
+      const frac = j / (rest + 1);
+      result[idx].start = restStart + frac * restDuration;
+      result[idx].end = restStart + ((j + 1) / (rest + 1)) * restDuration;
+      result[idx].midi = Math.round(midiA + ((idx - a) / gap) * (midiB - midiA));
     }
   }
 
@@ -330,26 +374,29 @@ function fixStretchedWords(matched: Array<WordTimestamp | null>): Array<WordTime
 
 /**
  * Aligns Whisper word timestamps to user-provided lyrics.
- * Pauses are accepted for API compatibility but are not used as hard anchors.
+ * `pauses` (silences in the separated vocals) mark phrase boundaries for words the
+ * transcription missed; they never move a word the transcription did find.
  */
 export function alignLyrics(
   lyrics: string,
   whisperWords: WordTimestamp[],
   lang: string,
-  _pauses: Pause[] = []
+  pauses: Pause[] = []
 ): AlignedSyllable[] {
   const lines = lyrics.split("\n").map((l) => l.trim()).filter(Boolean);
   const whisperNorm = whisperWords.map((w) => normalize(w.word));
 
   const allMatched: Array<WordTimestamp | null> = [];
   const allLyricWords: string[] = [];
+  const lineOf: number[] = [];
 
   let searchStart = 0;
   let lastMatchTime = -1;
 
-  for (const line of lines) {
+  for (const [li, line] of lines.entries()) {
     const lineWords = line.split(/\s+/).filter(Boolean);
     allLyricWords.push(...lineWords);
+    lineWords.forEach(() => lineOf.push(li));
 
     const res = matchLine(lineWords, whisperWords, whisperNorm, searchStart, lastMatchTime);
     allMatched.push(...fixStretchedWords(res.matched));
@@ -357,7 +404,7 @@ export function alignLyrics(
     lastMatchTime = res.lastMatchTime;
   }
 
-  const interpolated = interpolateMissing(allMatched, allLyricWords);
+  const interpolated = interpolateMissing(allMatched, allLyricWords, lineOf, pauses);
 
   const output: AlignedSyllable[] = [];
   let wordIdx = 0;
