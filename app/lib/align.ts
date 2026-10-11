@@ -268,6 +268,66 @@ function midiForRange(word: WordTimestamp, start: number, end: number): number {
   return word.midi;
 }
 
+const STRETCH_MIN_GAP_SEC = 1.0;      // silence between the two words, as reported by the aligner
+const STRETCH_MIN_WORD_SEC = 1.2;     // the word before the gap is suspiciously long
+const NOTE_CHANGE_WINDOW_SEC = 0.2;
+const NOTE_CHANGE_MIN_SEMITONES = 2;
+const NOTE_CHANGE_MIN_FRAMES = 8;
+
+/** First time inside the word where the sung pitch jumps to a different note, or null. */
+function firstNoteChange(word: WordTimestamp): number | null {
+  const frames = ((word as WordWithPitch).pitchFrames ?? []).filter(
+    (p) => p.confidence > 0.5 && p.time >= word.start && p.time <= word.end
+  );
+  for (const f of frames) {
+    if (f.time < word.start + NOTE_CHANGE_WINDOW_SEC) continue;
+    if (f.time > word.end - NOTE_CHANGE_WINDOW_SEC) break;
+    const before = frames.filter((p) => p.time >= f.time - NOTE_CHANGE_WINDOW_SEC && p.time < f.time);
+    const after = frames.filter((p) => p.time >= f.time && p.time < f.time + NOTE_CHANGE_WINDOW_SEC);
+    if (before.length < NOTE_CHANGE_MIN_FRAMES || after.length < NOTE_CHANGE_MIN_FRAMES) continue;
+    const a = median(before.map((p) => p.midi));
+    const b = median(after.map((p) => p.midi));
+    if (a !== null && b !== null && Math.abs(a - b) >= NOTE_CHANGE_MIN_SEMITONES) return f.time;
+  }
+  return null;
+}
+
+/**
+ * Aligners tend to stretch a word over the rest of a sung phrase and hang the next word on
+ * whatever comes after the break (often a wordless "ooh"). Seen as: a very long word, then
+ * a gap of a second or more, then another very long word of the same line. When the first
+ * one holds more than one note, the next word really starts at the note change — move it
+ * back there.
+ */
+function fixStretchedWords(matched: Array<WordTimestamp | null>): Array<WordTimestamp | null> {
+  const out = [...matched];
+  for (let k = 1; k < out.length; k++) {
+    const prev = out[k - 1];
+    const cur = out[k];
+    if (!prev || !cur) continue;
+    if (cur.start - prev.end < STRETCH_MIN_GAP_SEC) continue;
+    if (prev.end - prev.start < STRETCH_MIN_WORD_SEC) continue;
+    // A real mid-line breath is followed by a normal-length word; a word hung on a wordless
+    // vocalization is stretched too. Repeated vocalizations ("ooh ooh") are long by nature.
+    if (cur.end - cur.start < STRETCH_MIN_WORD_SEC) continue;
+    if (normalize(prev.word) === normalize(cur.word)) continue;
+
+    const cut = firstNoteChange(prev);
+    if (cut === null) continue;
+
+    const frames = (prev as WordWithPitch).pitchFrames;
+    const head: WordWithPitch = { ...prev, end: cut };
+    const tail: WordWithPitch = { ...prev, word: cur.word, start: cut };
+    if (frames) {
+      head.pitchFrames = frames.filter((p) => p.time < cut);
+      tail.pitchFrames = frames.filter((p) => p.time >= cut);
+    }
+    out[k - 1] = head;
+    out[k] = tail;
+  }
+  return out;
+}
+
 /**
  * Aligns Whisper word timestamps to user-provided lyrics.
  * Pauses are accepted for API compatibility but are not used as hard anchors.
@@ -292,7 +352,7 @@ export function alignLyrics(
     allLyricWords.push(...lineWords);
 
     const res = matchLine(lineWords, whisperWords, whisperNorm, searchStart, lastMatchTime);
-    allMatched.push(...res.matched);
+    allMatched.push(...fixStretchedWords(res.matched));
     searchStart = res.searchStart;
     lastMatchTime = res.lastMatchTime;
   }
