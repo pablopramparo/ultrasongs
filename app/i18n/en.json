@@ -219,5 +219,7 @@
   "editor.noteRap": "Rap",
   "editor.noteRapGolden": "Golden rap",
   "editor.newPhrase": "New phrase",
-  "editor.newPhraseTitle": "This note opens a new phrase: a line break is added before it (L)"
+  "editor.newPhraseTitle": "This note opens a new phrase: a line break is added before it (L)",
+  "editor.videoShow": "Show the video",
+  "editor.videoHide": "Hide the video"
 }

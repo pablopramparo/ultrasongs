@@ -23,7 +23,7 @@
   --color-zinc-200: #d4d7de;
   --color-zinc-300: #bcc1cc;
   --color-zinc-400: #9ca3af;
-  --color-zinc-500: #727888;
+  --color-zinc-500: #8a90a0; /* secondary text: ≥ 4.5:1 on the panel colour */
   --color-zinc-600: #4b5063;
   --color-zinc-700: #34374a;
   --color-zinc-800: #252735;
@@ -62,6 +62,14 @@ body {
 
 ::selection {
   background: rgb(59 130 246 / 0.35);
+}
+
+@layer base {
+  /* One visible focus style for every control; component classes with their own ring override it */
+  :where(button, [role="button"], a, select, input, textarea, summary):focus-visible {
+    outline: 2px solid rgb(59 130 246 / 0.65);
+    outline-offset: 2px;
+  }
 }
 
 @layer components {

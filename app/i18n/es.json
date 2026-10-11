@@ -219,5 +219,7 @@
   "editor.noteRap": "Rap",
   "editor.noteRapGolden": "Rap dorado",
   "editor.newPhrase": "Nueva frase",
-  "editor.newPhraseTitle": "Esta nota abre una frase nueva: se agrega un salto antes de ella (L)"
+  "editor.newPhraseTitle": "Esta nota abre una frase nueva: se agrega un salto antes de ella (L)",
+  "editor.videoShow": "Mostrar el video",
+  "editor.videoHide": "Ocultar el video"
 }

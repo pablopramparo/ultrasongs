@@ -676,20 +676,19 @@ export default function Home() {
           </div>
 
           {/* Player and lyrics side by side on wide windows, stacked on narrow ones */}
-          <div className={`grid gap-4 ${lyrics && audioUrl ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}>
+          <div className={`grid items-start gap-4 ${lyrics && audioUrl ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""}`}>
             {audioUrl && (
               <div className="card p-4">
                 <MediaPlayer key={audioUrl} audioUrl={audioUrl} videoUrl={videoUrl} />
               </div>
             )}
             {lyrics && (
-              <div className="card relative p-4 lg:min-h-[16rem]">
-                <div className="lg:absolute lg:inset-4 lg:flex lg:flex-col">
-                  <h3 className="section-label mb-3">{t("song.lyrics")}</h3>
-                  <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap font-mono text-sm leading-relaxed text-zinc-300 lg:min-h-0 lg:max-h-none lg:flex-1">
-                    {lyrics}
-                  </pre>
-                </div>
+              // Taller than the player so more lines fit without scrolling; it follows the window height up to a cap
+              <div className="card flex flex-col p-4 lg:h-[clamp(20rem,calc(100dvh-16rem),40rem)]">
+                <h3 className="section-label mb-3 shrink-0">{t("song.lyrics")}</h3>
+                <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap font-mono text-sm leading-relaxed text-zinc-300 lg:min-h-0 lg:max-h-none lg:flex-1">
+                  {lyrics}
+                </pre>
               </div>
             )}
           </div>
