@@ -43,26 +43,21 @@ def main() -> None:
 
     with contextlib.redirect_stdout(sys.stderr):
         audio = whisperx.load_audio(args.audio)
+        # initial_prompt is a decoding option in whisperx: it must go through asr_options at load time
+        # (passing it to transcribe() is silently ignored). It is opt-in: with a full-lyrics prompt
+        # Whisper tends to hallucinate repeated verses, which shifted every timestamp by ~25 s on
+        # a test song. alignLyrics() already matches the transcription against the lyrics.
+        use_prompt = os.environ.get("WHISPERX_USE_PROMPT", "") == "1"
+        asr_options = {"initial_prompt": args.prompt} if (args.prompt and use_prompt) else None
         model = whisperx.load_model(
             args.model,
             device,
             compute_type=compute_type,
             language=lang,
+            asr_options=asr_options,
         )
 
-        transcribe_kwargs = {
-            "batch_size": args.batch_size,
-            "language": lang,
-        }
-        # Try to pass initial_prompt — supported in some whisperx versions via **kwargs
-        if args.prompt:
-            try:
-                result = model.transcribe(audio, **transcribe_kwargs, initial_prompt=args.prompt)
-            except TypeError:
-                # whisperx version doesn't support initial_prompt, fall back silently
-                result = model.transcribe(audio, **transcribe_kwargs)
-        else:
-            result = model.transcribe(audio, **transcribe_kwargs)
+        result = model.transcribe(audio, batch_size=args.batch_size, language=lang)
 
         model_a, metadata = whisperx.load_align_model(
             language_code=result["language"],
