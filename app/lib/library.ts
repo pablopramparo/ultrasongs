@@ -36,20 +36,35 @@ function pitchOffsetFor(notes: ParsedUltrastar["notes"]): number {
   return pitches[Math.floor(pitches.length / 2)] < 30 ? 60 : 0;
 }
 
-/** Converts parsed Ultrastar notes (beats) to timeline-editor notes (seconds). */
+/**
+ * Converts parsed Ultrastar notes (beats) to timeline-editor notes (seconds). Phrase breaks ("-"
+ * lines) become a `lineStart` flag on the note that opens each phrase.
+ */
 export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
   const beatsPerSec = (parsed.bpm / 60) * 4;
   const offset = pitchOffsetFor(parsed.notes);
-  return parsed.notes
-    .filter((n) => n.type !== "-")
-    .map((n) => ({
+  // Files without any "-" line carry no phrase information: leave it undefined so it gets inferred.
+  const hasBreaks = parsed.notes.some((n) => n.type === "-");
+  const out: EditorNote[] = [];
+  let opensPhrase = false;
+
+  for (const n of parsed.notes) {
+    if (n.type === "-") {
+      opensPhrase = out.length > 0;
+      continue;
+    }
+    out.push({
       id: crypto.randomUUID(),
       syllable: n.syllable,
       startSec: parsed.gap / 1000 + n.startBeat / beatsPerSec,
       durationSec: Math.max(0.01, n.duration / beatsPerSec),
       pitch: n.pitch + offset,
       type: n.type as EditorNote["type"],
-    }));
+      ...(hasBreaks ? { lineStart: opensPhrase } : {}),
+    });
+    opensPhrase = false;
+  }
+  return out;
 }
 
 async function findTxt(dir: string): Promise<string | null> {

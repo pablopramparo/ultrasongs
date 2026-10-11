@@ -138,7 +138,7 @@
   "editor.points": "{n} pts",
   "editor.applyMic": "Aplicar mic",
   "editor.clear": "Limpiar",
-  "editor.help": "Arrastrá una nota · borde derecho = duración · doble click en vacío = agregar · S dividir · G dorada · F libre · Del eliminar",
+  "editor.help": "Arrastrá una nota · borde derecho = duración · doble click en vacío = agregar · S dividir · L nueva frase · G dorada · F libre · Del eliminar",
   "stage.separating": "Separando voz de la música…",
   "stage.pitch": "Detectando pitch con torchcrepe…",
   "stage.transcribing": "Transcribiendo letra con Whisper…",
@@ -217,5 +217,7 @@
   "sidebar.confirmYes": "Sí, guardar todos",
   "editor.noteFreestyle": "Libre (no se puntúa)",
   "editor.noteRap": "Rap",
-  "editor.noteRapGolden": "Rap dorado"
+  "editor.noteRapGolden": "Rap dorado",
+  "editor.newPhrase": "Nueva frase",
+  "editor.newPhraseTitle": "Esta nota abre una frase nueva: se agrega un salto antes de ella (L)"
 }

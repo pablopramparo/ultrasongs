@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { EditorNote, NoteType } from "@/app/lib/editorNote";
+import { hasLineMarks, inferLineStarts, type EditorNote, type NoteType } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
@@ -44,6 +44,16 @@ function noteLook(type: NoteType): { background: string; border?: string; color?
   }
 }
 
+/** Removes a note; if it opened a phrase, the next note takes over that role. */
+function withoutNote(list: EditorNote[], id: string): EditorNote[] {
+  const idx = list.findIndex((n) => n.id === id);
+  if (idx === -1) return list;
+  const removed = list[idx];
+  const rest = list.filter((n) => n.id !== id);
+  if (removed.lineStart && rest[idx] && !rest[idx].lineStart) rest[idx] = { ...rest[idx], lineStart: true };
+  return rest;
+}
+
 function fmtClock(sec: number, decimals = false) {
   const s = Math.max(0, sec);
   const m = Math.floor(s / 60);
@@ -68,7 +78,10 @@ export default function TimelineEditor({
   initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, onClose,
 }: Props) {
   const { t } = useI18n();
-  const [notes, setNotes] = useState<EditorNote[]>(initialNotes);
+  // Show the phrases the export will use, also for songs that never had them recorded
+  const [notes, setNotes] = useState<EditorNote[]>(() =>
+    hasLineMarks(initialNotes) ? initialNotes : inferLineStarts(initialNotes)
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pxPerSec, setPxPerSec] = useState(120);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -706,7 +719,7 @@ export default function TimelineEditor({
       const a: EditorNote = { ...n, durationSec: half, syllable: n.syllable.slice(0, cut) };
       const b: EditorNote = {
         ...n, id: crypto.randomUUID(), startSec: n.startSec + half,
-        durationSec: half, syllable: n.syllable.slice(cut),
+        durationSec: half, syllable: n.syllable.slice(cut), lineStart: false,
       };
       const result = [...prev];
       result.splice(idx, 1, a, b);
@@ -721,12 +734,17 @@ export default function TimelineEditor({
       if (tag === "INPUT" || tag === "TEXTAREA") return; // don't steal input events
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       if ((e.code === "Delete" || e.code === "Backspace") && selectedId) {
-        setNotes((prev) => prev.filter((n) => n.id !== selectedId));
+        setNotes((prev) => withoutNote(prev, selectedId));
         setSelectedId(null);
       }
       if (e.code === "KeyS" && !e.ctrlKey && !e.metaKey && selectedId) {
         e.preventDefault();
         splitSelected();
+      }
+      // L: this note opens a new phrase (a "-" line goes before it)
+      if (e.code === "KeyL" && !e.ctrlKey && !e.metaKey && selectedId) {
+        e.preventDefault();
+        setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, lineStart: !n.lineStart } : n)));
       }
       // G: golden on/off (rap notes keep their rap kind); F: freestyle on/off
       if ((e.code === "KeyG" || e.code === "KeyF") && !e.ctrlKey && !e.metaKey && selectedId) {
@@ -760,6 +778,7 @@ export default function TimelineEditor({
     `repeating-linear-gradient(to right, rgba(148,163,184,0.07) 0, rgba(148,163,184,0.07) 1px, transparent 1px, transparent ${minorStep * pxPerSec}px)`,
   ].join(",");
 
+  const firstStart = notes.reduce((m, n) => Math.min(m, n.startSec), Infinity);
   const chip =
     "rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700";
   const squareBtn =
@@ -953,6 +972,16 @@ export default function TimelineEditor({
             <button onClick={splitSelected} title={t("editor.splitTitle")} className={chip}>
               {t("editor.split")}
             </button>
+            <button
+              onClick={() =>
+                setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, lineStart: !n.lineStart } : n)))
+              }
+              title={t("editor.newPhraseTitle")}
+              aria-pressed={!!selectedNote.lineStart}
+              className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
+            >
+              ¶ {t("editor.newPhrase")}
+            </button>
             <select
               value={selectedNote.type}
               onChange={(e) =>
@@ -969,7 +998,7 @@ export default function TimelineEditor({
               <option value="G">★ {t("editor.noteRapGolden")}</option>
             </select>
             <button
-              onClick={() => { setNotes((prev) => prev.filter((n) => n.id !== selectedId)); setSelectedId(null); }}
+              onClick={() => { setNotes((prev) => withoutNote(prev, selectedId!)); setSelectedId(null); }}
               title={t("editor.deleteTitle")}
               className="rounded-md border border-red-900 px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-950"
             >
@@ -1101,6 +1130,19 @@ export default function TimelineEditor({
               }}
             />
           ))}
+
+          {/* Phrase starts: a dashed line just before the first note of each phrase */}
+          {notes.map((n) =>
+            n.lineStart && n.startSec > firstStart + 1e-6 ? (
+              <div
+                key={`phrase-${n.id}`}
+                style={{
+                  position: "absolute", left: KEYS_W + n.startSec * pxPerSec - 3, top: 0, height: ROLL_H,
+                  borderLeft: "1px dashed rgba(168,85,247,0.65)", zIndex: 5, pointerEvents: "none",
+                }}
+              />
+            ) : null
+          )}
 
           {/* Notes */}
           {notes.map((note) => {

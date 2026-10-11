@@ -2,7 +2,7 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import MusicTempo from "music-tempo";
 import { existsSync } from "fs";
-import type { EditorNote, NoteType } from "./editorNote";
+import { hasLineMarks, inferLineStarts, LINE_BREAK_GAP_SEC, type EditorNote, type NoteType } from "./editorNote";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -32,16 +32,9 @@ export function msToBeats(ms: number, bpm: number, gap: number): number {
 }
 
 /**
- * Silence between two notes (seconds) from which a new lyric line starts. Editor notes carry no
- * line information, so breaks are inferred from pauses; 0.4 s matched the lyric line count of
- * the songs checked.
- */
-const LINE_BREAK_GAP_SEC = 0.4;
-
-/**
  * Converts timeline-editor notes (seconds) to Ultrastar notes (beats), keeping notes from
- * overlapping and inserting a line break ("-") wherever a pause of `breakGapSec` or more separates
- * two notes.
+ * overlapping. A "-" line goes before every note flagged `lineStart`; notes that carry no phrase
+ * information get phrases inferred from pauses of `breakGapSec` or more.
  */
 export function editorNotesToUltrastar(
   notes: EditorNote[],
@@ -49,15 +42,15 @@ export function editorNotesToUltrastar(
   gap: number,
   breakGapSec = LINE_BREAK_GAP_SEC
 ): UltrastarNote[] {
+  const marked = hasLineMarks(notes) ? notes : inferLineStarts(notes, breakGapSec);
   const out: UltrastarNote[] = [];
   let prevEnd = -1;
-  let prevEndSec = -1;
-  for (const en of notes) {
+  for (const en of marked) {
     const startBeat = msToBeats(en.startSec * 1000, bpm, gap);
     const endBeat = msToBeats((en.startSec + en.durationSec) * 1000, bpm, gap);
     const duration = Math.max(1, endBeat - startBeat);
 
-    if (prevEnd >= 0 && en.startSec - prevEndSec >= breakGapSec) {
+    if (prevEnd >= 0 && en.lineStart) {
       // Same placement as the auto mode: 4 beats before the next note, never before the last one ends.
       const breakBeat = Math.max(prevEnd + 1, startBeat - 4);
       out.push({ type: "-", startBeat: breakBeat, duration: 0, pitch: 0, syllable: "" });
@@ -65,7 +58,6 @@ export function editorNotesToUltrastar(
     }
 
     const adjStart = prevEnd >= 0 ? Math.max(startBeat, prevEnd + 1) : startBeat;
-    prevEndSec = en.startSec + en.durationSec;
     out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
     prevEnd = adjStart + duration;
   }

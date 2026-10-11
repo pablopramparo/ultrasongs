@@ -37,16 +37,25 @@ export async function POST(request: NextRequest) {
 
     const duration = words.at(-1)?.end ?? 0;
 
-    const notes: EditorNote[] = aligned
-      .filter((s) => !s.isLineBreak)
-      .map((s, i) => ({
-        id: `n${i}`,
+    // Each line of the lyrics is a phrase: the first note after a line break opens one.
+    const notes: EditorNote[] = [];
+    let opensPhrase = false;
+    for (const s of aligned) {
+      if (s.isLineBreak) {
+        opensPhrase = notes.length > 0;
+        continue;
+      }
+      notes.push({
+        id: `n${notes.length}`,
         syllable: s.syllable,
         startSec: s.start,
         durationSec: Math.max(0.1, s.end - s.start),
         pitch: s.midi,
         type: ":" as const,
-      }));
+        lineStart: opensPhrase,
+      });
+      opensPhrase = false;
+    }
 
     // GAP = first note start minus a small lead-in (ms)
     const firstStart = notes[0]?.startSec ?? 0;
