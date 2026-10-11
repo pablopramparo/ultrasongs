@@ -202,7 +202,7 @@ Set these in `.env.local` (see `.env.example`). All are optional.
 E
 ```
 
-- `:` normal note · `*` golden note · `-` line break · `E` end of song
+- `:` normal note · `*` golden note (star) · `F` freestyle (not sung or scored) · `R` rap · `G` golden rap · `-` line break · `E` end of song
 - Note: `[type] [start_beat] [duration_beats] [midi_pitch] [syllable]`
 - `GAP` = milliseconds before beat 0; beat formula: `((ms − GAP) / 1000) × (BPM / 60) × 4`
 

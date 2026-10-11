@@ -138,7 +138,7 @@
   "editor.points": "{n} pts",
   "editor.applyMic": "Apply mic",
   "editor.clear": "Clear",
-  "editor.help": "Drag a note · right edge = resize · double-click empty = add · S = split · Del = delete",
+  "editor.help": "Drag a note · right edge = length · double-click empty = add · S split · G golden · F freestyle · Del delete",
   "stage.separating": "Separating vocals from the music…",
   "stage.pitch": "Detecting pitch with torchcrepe…",
   "stage.transcribing": "Transcribing lyrics with Whisper…",
@@ -214,5 +214,8 @@
   "sidebar.savedMany": "Saved to Songs: {n}",
   "sidebar.confirmSaveAll": "All drafts ({n}) will be saved to:",
   "sidebar.confirmSaveAllNote": "Folders not created by Ultrasongs are left alone; the ones it created are updated.",
-  "sidebar.confirmYes": "Yes, save all"
+  "sidebar.confirmYes": "Yes, save all",
+  "editor.noteFreestyle": "Freestyle (not scored)",
+  "editor.noteRap": "Rap",
+  "editor.noteRapGolden": "Golden rap"
 }

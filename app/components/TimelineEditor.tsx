@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { EditorNote } from "@/app/lib/editorNote";
+import type { EditorNote, NoteType } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
@@ -10,7 +10,7 @@ import RangeSlider from "./RangeSlider";
 const KEYS_W = 68;
 const PX_PITCH = 18;
 const MIN_PITCH = 36;    // C2
-const MAX_PITCH = 84;    // C6
+const MAX_PITCH = 96;    // C7
 const ROLL_H = (MAX_PITCH - MIN_PITCH + 1) * PX_PITCH;
 const RULER_H = 28;
 /** Seconds between ruler labels; the first one that leaves enough room at the current zoom is used. */
@@ -23,6 +23,27 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 function noteName(p: number) { return `${NOTE_NAMES[p % 12]}${Math.floor(p / 12) - 1}`; }
 function isBlack(p: number) { return BLACK.has(p % 12); }
 function pitchToY(p: number) { return (MAX_PITCH - p) * PX_PITCH; }
+/** Fill and label colour per note kind. Freestyle is hatched: it is drawn but never scored. */
+function noteLook(type: NoteType): { background: string; border?: string; color?: string; fontStyle?: string } {
+  switch (type) {
+    case "*":
+      return { background: "linear-gradient(90deg, #f59e0b, #f97316)" };
+    case "F":
+      return {
+        background: "repeating-linear-gradient(135deg, rgba(100,116,139,0.55) 0 5px, rgba(71,85,105,0.55) 5px 10px)",
+        border: "1px dashed #94a3b8",
+        color: "#e2e8f0",
+        fontStyle: "italic",
+      };
+    case "R":
+      return { background: "linear-gradient(90deg, #14b8a6, #22d3ee)" };
+    case "G":
+      return { background: "linear-gradient(90deg, #f59e0b, #14b8a6)" };
+    default:
+      return { background: "linear-gradient(90deg, #3b82f6, #a855f7)" };
+  }
+}
+
 function fmtClock(sec: number, decimals = false) {
   const s = Math.max(0, sec);
   const m = Math.floor(s / 60);
@@ -707,6 +728,18 @@ export default function TimelineEditor({
         e.preventDefault();
         splitSelected();
       }
+      // G: golden on/off (rap notes keep their rap kind); F: freestyle on/off
+      if ((e.code === "KeyG" || e.code === "KeyF") && !e.ctrlKey && !e.metaKey && selectedId) {
+        e.preventDefault();
+        const golden: Record<NoteType, NoteType> = { ":": "*", "*": ":", F: "*", R: "G", G: "R" };
+        setNotes((prev) =>
+          prev.map((n) => {
+            if (n.id !== selectedId) return n;
+            if (e.code === "KeyG") return { ...n, type: golden[n.type] };
+            return { ...n, type: n.type === "F" ? ":" : "F" };
+          })
+        );
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -924,13 +957,16 @@ export default function TimelineEditor({
               value={selectedNote.type}
               onChange={(e) =>
                 setNotes((prev) =>
-                  prev.map((n) => n.id === selectedId ? { ...n, type: e.target.value as ":" | "*" } : n)
+                  prev.map((n) => n.id === selectedId ? { ...n, type: e.target.value as NoteType } : n)
                 )
               }
               className="rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs text-zinc-200"
             >
               <option value=":">{t("editor.noteNormal")}</option>
-              <option value="*">{t("editor.noteGolden")}</option>
+              <option value="*">★ {t("editor.noteGolden")}</option>
+              <option value="F">{t("editor.noteFreestyle")}</option>
+              <option value="R">{t("editor.noteRap")}</option>
+              <option value="G">★ {t("editor.noteRapGolden")}</option>
             </select>
             <button
               onClick={() => { setNotes((prev) => prev.filter((n) => n.id !== selectedId)); setSelectedId(null); }}
@@ -1079,10 +1115,7 @@ export default function TimelineEditor({
                   position: "absolute", left: x + 1, top: y + 2,
                   width: Math.max(w - 2, 8), height: PX_PITCH - 4,
                   zIndex: sel ? 30 : 10, cursor: "grab", userSelect: "none",
-                  background:
-                    note.type === "*"
-                      ? "linear-gradient(90deg, #f59e0b, #f97316)"
-                      : "linear-gradient(90deg, #3b82f6, #a855f7)",
+                  ...noteLook(note.type),
                   boxShadow: sel ? "0 0 0 2px #fff, 0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.45)",
                 }}
                 className="flex items-center overflow-hidden whitespace-nowrap rounded-md px-1.5 text-[11px] font-semibold text-white transition-[filter] hover:brightness-110"
@@ -1090,6 +1123,7 @@ export default function TimelineEditor({
                 onClick={(e) => { e.stopPropagation(); playNotePreview(note.pitch, note.durationSec); }}
                 onDoubleClick={(e) => e.stopPropagation()}
               >
+                {(note.type === "*" || note.type === "G") && <span className="mr-0.5">★</span>}
                 {note.syllable}
                 {/* Resize handle */}
                 <div

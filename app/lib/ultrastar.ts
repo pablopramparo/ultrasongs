@@ -2,12 +2,12 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import MusicTempo from "music-tempo";
 import { existsSync } from "fs";
-import type { EditorNote } from "./editorNote";
+import type { EditorNote, NoteType } from "./editorNote";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export interface UltrastarNote {
-  type: ":" | "*" | "-";
+  type: NoteType | "-";
   startBeat: number;
   duration: number;
   pitch: number;
@@ -191,11 +191,11 @@ export function parseUltrastarTxt(content: string): ParsedUltrastar {
       if (colon > 0) {
         meta[trimmed.slice(1, colon).toUpperCase()] = trimmed.slice(colon + 1).trim();
       }
-    } else if (trimmed.startsWith(": ") || trimmed.startsWith("* ")) {
+    } else if (/^[:*FRG] /.test(trimmed)) {
       const parts = trimmed.split(" ");
       if (parts.length >= 4) {
         notes.push({
-          type: parts[0] as ":" | "*",
+          type: parts[0] as NoteType,
           startBeat: parseInt(parts[1]),
           duration: parseInt(parts[2]),
           pitch: parseInt(parts[3]),

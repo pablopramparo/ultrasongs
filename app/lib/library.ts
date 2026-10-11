@@ -22,9 +22,24 @@ export interface LibrarySong {
   ours: boolean;
 }
 
+/**
+ * Ultrastar pitches are relative to C4 (0 = MIDI 60) in files made by other tools, while the
+ * files this app writes carry absolute MIDI. Telling them apart by the median keeps both inside
+ * the editor's range; 60 is five whole octaves, so scoring (which ignores octave) is unaffected.
+ */
+function pitchOffsetFor(notes: ParsedUltrastar["notes"]): number {
+  const pitches = notes
+    .filter((n) => n.type !== "-" && n.type !== "F")
+    .map((n) => n.pitch)
+    .sort((a, b) => a - b);
+  if (pitches.length === 0) return 0;
+  return pitches[Math.floor(pitches.length / 2)] < 30 ? 60 : 0;
+}
+
 /** Converts parsed Ultrastar notes (beats) to timeline-editor notes (seconds). */
 export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
   const beatsPerSec = (parsed.bpm / 60) * 4;
+  const offset = pitchOffsetFor(parsed.notes);
   return parsed.notes
     .filter((n) => n.type !== "-")
     .map((n) => ({
@@ -32,8 +47,8 @@ export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
       syllable: n.syllable,
       startSec: parsed.gap / 1000 + n.startBeat / beatsPerSec,
       durationSec: Math.max(0.01, n.duration / beatsPerSec),
-      pitch: n.pitch,
-      type: n.type as ":" | "*",
+      pitch: n.pitch + offset,
+      type: n.type as EditorNote["type"],
     }));
 }
 
