@@ -5,10 +5,16 @@ import os
 import sys
 from pathlib import Path
 
+import hf_compat  # noqa: F401 - Windows symlink fix, see hf_compat.py
 import whisperx
 
 
 def add_project_ffmpeg_to_path() -> None:
+    """Puts ffmpeg on PATH: FFMPEG_PATH (set by the host app) wins, else the one from node_modules."""
+    explicit = os.environ.get("FFMPEG_PATH")
+    if explicit and Path(explicit).exists():
+        os.environ["PATH"] = str(Path(explicit).parent) + os.pathsep + os.environ.get("PATH", "")
+        return
     root = Path(__file__).resolve().parents[1]
     matches = list(root.glob(
         "node_modules/.pnpm/@ffmpeg-installer+win32-x64@*/"
