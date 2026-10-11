@@ -116,6 +116,23 @@ for (const [aliasName] of packagesIn(aliasModules)) {
   }
 }
 
+/**
+ * Some npm packages ship stray secrets files (@ffmpeg-installer/ffmpeg publishes a .env with its
+ * author's NPM_CONFIG_TOKEN). They are not needed at runtime and must not travel in the installer.
+ */
+let stripped = 0;
+(function stripEnvFiles(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) stripEnvFiles(full);
+    else if (/^\.env(\..+)?$/i.test(entry.name) && entry.name.toLowerCase() !== ".env.example") {
+      rmSync(full);
+      stripped++;
+    }
+  }
+})(BUNDLE);
+console.log(`[prepare] removed ${stripped} stray .env file(s) from the bundle`);
+
 console.log("[prepare] copying node.exe sidecar…");
 mkdirSync(BIN_DIR, { recursive: true });
 cpSync(process.execPath, resolve(BIN_DIR, "node-x86_64-pc-windows-msvc.exe"));
