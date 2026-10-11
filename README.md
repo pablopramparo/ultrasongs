@@ -14,7 +14,7 @@ Generate [Ultrastar Deluxe](https://ultrastar-deluxe.org/) compatible `.txt` son
 - Upload any audio or video format (MP4, MKV, MP3, FLAC, WAV, …)
 - Automatic vocal separation via [Demucs](https://github.com/facebookresearch/demucs) `htdemucs`
 - Per-word MIDI pitch via [torchcrepe](https://github.com/maxrmorrison/torchcrepe) — neural pitch estimation tuned for singing voices
-- Transcription via [faster-whisper](https://github.com/guillaumekynast/faster-whisper), biased by your provided lyrics
+- Transcription via [faster-whisper](https://github.com/SYSTRAN/faster-whisper), biased by your provided lyrics
 - Fuzzy Levenshtein alignment of Whisper words → user lyrics
 - BPM detection + beat-accurate note placement
 - Syllable splitting (20+ languages via TeX hyphenation patterns)
@@ -104,6 +104,19 @@ Generate
 Tested on an NVIDIA GTX 1080 (8 GB VRAM). A 4-minute song takes roughly 40–60 s (Demucs + torchcrepe + Whisper running sequentially).
 
 Default Whisper model: `medium`. For tighter VRAM budgets, set `WHISPER_MODEL=large-v3` to use `int8_float16` compute.
+
+### WhisperX forced alignment (more accurate word timing)
+
+Plain Whisper timestamps drift by ±100–300 ms. With `ALIGN_ENGINE=whisperx` the service runs [WhisperX](https://github.com/m-bain/whisperX) (wav2vec2 forced alignment) in its own virtualenv at `python/.venv-whisperx`, which is gitignored.
+
+```bash
+python -m venv python/.venv-whisperx
+python/.venv-whisperx/Scripts/python -m pip install whisperx
+# GPU build of torch (the default wheel is CPU-only and ~6x slower):
+python/.venv-whisperx/Scripts/python -m pip install --no-deps --force-reinstall "torch==2.8.0+cu126" "torchaudio==2.8.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+```
+
+The worker picks CUDA automatically when available (`WHISPERX_DEVICE`, `WHISPERX_COMPUTE_TYPE` override it; pre-Volta cards such as the GTX 1080 default to `int8`). On a GTX 1080 a 3-minute vocals track aligns in ~23 s on GPU vs ~142 s on CPU.
 
 ## Ultrastar .txt format
 

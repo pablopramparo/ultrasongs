@@ -30,8 +30,15 @@ def main() -> None:
 
     add_project_ffmpeg_to_path()
 
-    device = os.environ.get("WHISPERX_DEVICE", "cpu")
-    compute_type = os.environ.get("WHISPERX_COMPUTE_TYPE", "int8")
+    import torch
+
+    # Auto-pick the GPU when this venv has a CUDA build of torch; override with WHISPERX_DEVICE.
+    device = os.environ.get("WHISPERX_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
+    # float16 is only fast on compute capability >= 7.0 (Volta+); Pascal cards (GTX 10xx) do best with int8.
+    fast_fp16 = device == "cuda" and torch.cuda.get_device_capability()[0] >= 7
+    default_compute = "float16" if fast_fp16 else "int8"
+    compute_type = os.environ.get("WHISPERX_COMPUTE_TYPE", default_compute)
+    print(f"[whisperx] device={device} compute={compute_type} model={args.model}", file=sys.stderr)
     lang = args.language or None
 
     with contextlib.redirect_stdout(sys.stderr):
