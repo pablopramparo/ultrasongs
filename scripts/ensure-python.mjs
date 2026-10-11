@@ -38,6 +38,8 @@ const PYTHON_VARS = [
   "WHISPERX_DEVICE",
   "WHISPERX_COMPUTE_TYPE",
   "WHISPERX_BATCH_SIZE",
+  "WHISPERX_USE_PROMPT",
+  "DEMUCS_MODEL",
 ];
 const extraEnv = Object.fromEntries(
   PYTHON_VARS.filter((k) => envLocal[k]).map((k) => [k, envLocal[k]])
