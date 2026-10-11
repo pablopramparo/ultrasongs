@@ -25,6 +25,7 @@
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Windows installer](#windows-installer)
 - [Run from source](#run-from-source)
@@ -35,6 +36,19 @@
 - [Tech stack](#tech-stack)
 - [Ultrastar .txt format](#ultrastar-txt-format)
 - [Credits](#credits) · [License](#license)
+
+## Screenshots
+
+<p align="center">
+  <img alt="Song view: player and lyrics" src="docs/screenshots/en/03-song.png" width="49%">
+  <img alt="Timeline editor" src="docs/screenshots/en/04-editor.png" width="49%">
+</p>
+<p align="center">
+  <img alt="New song form" src="docs/screenshots/en/02-new-song.png" width="49%">
+  <img alt="Songs library and settings" src="docs/screenshots/en/06-library.png" width="49%">
+</p>
+
+The interface comes in English and Spanish; both sets of screenshots (with an original demo song) are in [`docs/screenshots`](docs/screenshots).
 
 ## Features
 
