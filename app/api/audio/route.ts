@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { apiError } from "@/app/lib/apiResponse";
 import { existsSync } from "fs";
 import { resolveAllowed, serveFile } from "@/app/lib/safePath";

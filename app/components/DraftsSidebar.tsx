@@ -151,23 +151,6 @@ export default function DraftsSidebar({
     setExporting(null);
   };
 
-  const handleExportAll = async () => {
-    setExporting("all");
-    setExportMsg(null);
-    let okCount = 0;
-    const failures: string[] = [];
-    for (const d of drafts) {
-      const err = await exportDraft(d.id);
-      if (err) failures.push(`${d.title}: ${err}`);
-      else okCount++;
-    }
-    setExportMsg({
-      ok: failures.length === 0,
-      text: t("sidebar.savedMany", { n: okCount }) + (failures.length ? `. ${failures.join(" · ")}` : ""),
-    });
-    setExporting(null);
-  };
-
   const handleImportSubmit = async () => {
     if (!importTxt || !importMp3) return;
     setImporting(true);
@@ -198,7 +181,7 @@ export default function DraftsSidebar({
         title={t("sidebar.goHome")}
         className="flex h-28 w-full shrink-0 items-center justify-center border-b border-zinc-800 transition-colors hover:bg-zinc-800/60"
       >
-        <Image src="/ultrasong.png" alt="Ultrasongs" width={132} height={86} className="object-contain" priority />
+        <Image src="/ultrasong.png" alt="Ultrasongs" width={132} height={86} className="object-contain" priority unoptimized />
       </button>
 
       {/* Drafts */}
@@ -316,21 +299,11 @@ export default function DraftsSidebar({
           </div>
         )}
 
-        {/* Export to Songs folder */}
-        {drafts.length > 0 && (
-          <div className="border-t border-zinc-800 px-3 py-2">
-            <button
-              onClick={handleExportAll}
-              disabled={exporting !== null}
-              title={t("sidebar.saveAllTitle")}
-              className={footerBtn}
-            >
-              {exporting === "all" ? t("sidebar.saving") : t("sidebar.saveAll")}
-            </button>
-            {exportMsg && (
-              <p className={`px-2 pt-1 text-xs ${exportMsg.ok ? "text-green-400" : "text-red-400"}`}>{exportMsg.text}</p>
-            )}
-          </div>
+        {/* Result of exporting a single draft to the Songs folder */}
+        {exportMsg && (
+          <p className={`border-t border-zinc-800 px-5 py-2 text-xs ${exportMsg.ok ? "text-green-400" : "text-red-400"}`}>
+            {exportMsg.text}
+          </p>
         )}
 
         {/* Import section */}

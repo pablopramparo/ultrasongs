@@ -40,6 +40,8 @@
   ],
   "exclude": [
     "node_modules",
-    ".next-standalone/standalone"
+    ".next-standalone/standalone",
+    ".next-standalone/bundle",
+    "src-tauri/target"
   ]
 }
