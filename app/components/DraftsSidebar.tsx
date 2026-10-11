@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
+import { useI18n } from "@/app/i18n/I18nProvider";
 
 interface DraftMeta {
   id: string;
@@ -11,32 +12,53 @@ interface DraftMeta {
   hasVideo: boolean;
 }
 
+interface LibrarySong {
+  folder: string;
+  title: string;
+  artist: string;
+  hasVideo: boolean;
+  ours: boolean;
+}
+
 interface Props {
   onHome: () => void;
+  onOpenSettings: () => void;
+  /** Called with the new draft id after a song from the Songs folder was imported. */
+  onLibraryImport: (id: string) => void;
   onLoad: (id: string) => void;
   onImport: (txt: File, mp3: File, video: File | null) => void;
   refreshKey: number;
   currentDraftId: string | null;
 }
 
-function fmt(iso: string) {
+function fmt(iso: string, locale: string) {
   const d = new Date(iso);
   return (
-    d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }) +
+    d.toLocaleDateString(locale, { day: "2-digit", month: "short" }) +
     " " +
-    d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
   );
 }
 
 export default function DraftsSidebar({
   onHome,
+  onOpenSettings,
+  onLibraryImport,
   onLoad,
   onImport,
   refreshKey,
   currentDraftId,
 }: Props) {
+  const { t, locale } = useI18n();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [library, setLibrary] = useState<LibrarySong[]>([]);
+  const [libraryConfigured, setLibraryConfigured] = useState(true);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryBusy, setLibraryBusy] = useState<string | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importTxt, setImportTxt] = useState<File | null>(null);
@@ -61,6 +83,43 @@ export default function DraftsSidebar({
     };
   }, [refreshKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/library");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        setLibraryConfigured(data.configured);
+        setLibrary(data.songs);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const handleLibraryImport = async (song: LibrarySong) => {
+    setLibraryBusy(song.folder);
+    setLibraryError(null);
+    try {
+      const res = await fetch("/api/library/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: song.folder }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      onLibraryImport(data.id);
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : t("error.importFailed"));
+    } finally {
+      setLibraryBusy(null);
+    }
+  };
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setDeleting(id);
@@ -70,6 +129,43 @@ export default function DraftsSidebar({
     } finally {
       setDeleting(null);
     }
+  };
+
+  /** Writes one draft into SONGS_DIR. Returns an error message, or null on success. */
+  const exportDraft = async (id: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/drafts/${id}/export`, { method: "POST" });
+      const data = await res.json();
+      return res.ok ? null : (data.message as string);
+    } catch {
+      return t("sidebar.serverUnreachable");
+    }
+  };
+
+  const handleExport = async (e: React.MouseEvent, d: DraftMeta) => {
+    e.stopPropagation();
+    setExporting(d.id);
+    setExportMsg(null);
+    const err = await exportDraft(d.id);
+    setExportMsg(err ? { ok: false, text: `${d.title}: ${err}` } : { ok: true, text: t("sidebar.savedOne", { title: d.title }) });
+    setExporting(null);
+  };
+
+  const handleExportAll = async () => {
+    setExporting("all");
+    setExportMsg(null);
+    let okCount = 0;
+    const failures: string[] = [];
+    for (const d of drafts) {
+      const err = await exportDraft(d.id);
+      if (err) failures.push(`${d.title}: ${err}`);
+      else okCount++;
+    }
+    setExportMsg({
+      ok: failures.length === 0,
+      text: t("sidebar.savedMany", { n: okCount }) + (failures.length ? `. ${failures.join(" · ")}` : ""),
+    });
+    setExporting(null);
   };
 
   const handleImportSubmit = async () => {
@@ -89,155 +185,190 @@ export default function DraftsSidebar({
     }
   };
 
+  const footerBtn =
+    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40";
+  const fileInput =
+    "mt-1 block w-full text-xs text-zinc-400 file:mr-2 file:rounded-md file:border-0 file:bg-zinc-800 file:px-2 file:py-1 file:text-xs file:font-medium file:text-zinc-200 hover:file:bg-zinc-700";
+
   return (
-    <aside className="fixed left-0 top-0 z-30 flex h-screen w-64 flex-col overflow-y-auto border-r border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+    <aside className="fixed left-0 top-0 z-30 flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
       {/* Logo → home */}
       <button
         onClick={onHome}
-        title="Ir al inicio"
-        className="flex h-26 w-full shrink-0 items-center border-b border-zinc-200 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 mx-auto"
+        title={t("sidebar.goHome")}
+        className="flex h-28 w-full shrink-0 items-center justify-center border-b border-zinc-800 transition-colors hover:bg-zinc-800/60"
       >
-        <Image
-          src="/ultrasong.png"
-          alt="Ultrasong"
-          width={100}
-          height={40}
-          className="object-contain mx-auto"
-        />
+        <Image src="/ultrasong.png" alt="Ultrasongs" width={132} height={86} className="object-contain" priority />
       </button>
 
-      <>
+      {/* Drafts */}
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+        <span className="section-label">{t("sidebar.drafts")}</span>
+        {drafts.length > 0 && <span className="text-xs text-zinc-500">{drafts.length}</span>}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
+        {drafts.length === 0 && (
+          <p className="px-1 py-6 text-center text-sm text-zinc-500">{t("sidebar.noDrafts")}</p>
+        )}
+        {drafts.map((d) => (
+          <div
+            key={d.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onLoad(d.id)}
+            onKeyDown={(e) => e.key === "Enter" && onLoad(d.id)}
+            className={`group relative flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors ${
+              d.id === currentDraftId
+                ? "bg-blue-600/15 ring-1 ring-inset ring-blue-500/50"
+                : "hover:bg-zinc-800"
+            }`}
+          >
+            <span className="truncate pr-12 text-sm font-semibold text-zinc-100">{d.title || t("sidebar.untitled")}</span>
+            <span className="truncate text-xs text-zinc-400">{d.artist || "—"}</span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xs text-zinc-500">{fmt(d.savedAt, locale)}</span>
+              {d.hasVideo && (
+                <span className="rounded bg-zinc-800 px-1.5 py-px text-[11px] font-medium text-zinc-400 group-hover:bg-zinc-700">
+                  {t("sidebar.video")}
+                </span>
+              )}
+            </div>
+
+            {/* Export to Songs button */}
+            <button
+              onClick={(e) => handleExport(e, d)}
+              disabled={exporting !== null}
+              title={t("sidebar.exportDraft")}
+              className="absolute right-9 top-2.5 hidden rounded-md p-1 text-zinc-500 hover:bg-green-950 hover:text-green-400 group-hover:flex"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+              </svg>
+            </button>
+
+            {/* Delete button */}
+            <button
+              onClick={(e) => handleDelete(e, d.id)}
+              disabled={deleting === d.id}
+              title={t("sidebar.deleteDraft")}
+              className="absolute right-2 top-2.5 hidden rounded-md p-1 text-zinc-500 hover:bg-red-950 hover:text-red-400 group-hover:flex"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Library and tools, pinned to the bottom */}
+      <div className="max-h-[55%] shrink-0 overflow-y-auto border-t border-zinc-800">
+        {/* Settings */}
         <div className="px-3 py-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
-            Borradores
-          </span>
+          <button onClick={onOpenSettings} className={footerBtn}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            {t("sidebar.settings")}
+          </button>
         </div>
 
-        {/* Import section */}
-        <div className="border-t border-zinc-200 px-2 py-2 dark:border-zinc-700">
-          <button
-            onClick={() => setShowImport((v) => !v)}
-            className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            <svg
-              className="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+        {/* Songs library */}
+        {libraryConfigured && (
+          <div className="border-t border-zinc-800 px-3 py-2">
+            <button
+              onClick={() => setLibraryOpen((v) => !v)}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-              />
+              <span>{t("sidebar.inSongs", { n: library.length })}</span>
+              <svg
+                className={`h-3.5 w-3.5 transition-transform ${libraryOpen ? "rotate-180" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {libraryOpen && (
+              <div className="mt-1 flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+                {libraryError && <p className="px-2 text-xs text-red-400">{libraryError}</p>}
+                {library.length === 0 && <p className="px-2 py-2 text-center text-xs text-zinc-500">{t("sidebar.noSongs")}</p>}
+                {library.map((song) => (
+                  <button
+                    key={song.folder}
+                    onClick={() => handleLibraryImport(song)}
+                    disabled={libraryBusy !== null}
+                    title={t("sidebar.importAsDraft")}
+                    className="flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-zinc-200">{song.title}</span>
+                      {song.ours && (
+                        <span title={t("sidebar.createdHere")} className="text-xs text-green-400">✓</span>
+                      )}
+                      {libraryBusy === song.folder && <span className="text-[11px] text-zinc-500">{t("sidebar.importingSong")}</span>}
+                    </span>
+                    <span className="truncate text-xs text-zinc-500">{song.artist || "—"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Export to Songs folder */}
+        {drafts.length > 0 && (
+          <div className="border-t border-zinc-800 px-3 py-2">
+            <button
+              onClick={handleExportAll}
+              disabled={exporting !== null}
+              title={t("sidebar.saveAllTitle")}
+              className={footerBtn}
+            >
+              {exporting === "all" ? t("sidebar.saving") : t("sidebar.saveAll")}
+            </button>
+            {exportMsg && (
+              <p className={`px-2 pt-1 text-xs ${exportMsg.ok ? "text-green-400" : "text-red-400"}`}>{exportMsg.text}</p>
+            )}
+          </div>
+        )}
+
+        {/* Import section */}
+        <div className="border-t border-zinc-800 px-3 py-2">
+          <button onClick={() => setShowImport((v) => !v)} className={footerBtn}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            Importar .txt
+            {t("sidebar.importTxt")}
           </button>
           {showImport && (
-            <div className="mt-1.5 flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-800">
-              <label className="text-[10px] text-zinc-500">
-                Archivo .txt *
-                <input
-                  ref={txtRef}
-                  type="file"
-                  accept=".txt"
-                  className="mt-0.5 block w-full text-[10px] text-zinc-600 file:mr-1 file:rounded file:border-0 file:bg-zinc-100 file:px-1.5 file:py-0.5 file:text-[10px] dark:file:bg-zinc-700 dark:file:text-zinc-300"
-                  onChange={(e) => setImportTxt(e.target.files?.[0] ?? null)}
-                />
+            <div className="mt-2 flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+              <label className="text-xs text-zinc-400">
+                {t("sidebar.fileTxt")}
+                <input ref={txtRef} type="file" accept=".txt" className={fileInput}
+                  onChange={(e) => setImportTxt(e.target.files?.[0] ?? null)} />
               </label>
-              <label className="text-[10px] text-zinc-500">
-                Archivo .mp3 *
-                <input
-                  ref={mp3Ref}
-                  type="file"
-                  accept="audio/*"
-                  className="mt-0.5 block w-full text-[10px] text-zinc-600 file:mr-1 file:rounded file:border-0 file:bg-zinc-100 file:px-1.5 file:py-0.5 file:text-[10px] dark:file:bg-zinc-700 dark:file:text-zinc-300"
-                  onChange={(e) => setImportMp3(e.target.files?.[0] ?? null)}
-                />
+              <label className="text-xs text-zinc-400">
+                {t("sidebar.fileMp3")}
+                <input ref={mp3Ref} type="file" accept="audio/*" className={fileInput}
+                  onChange={(e) => setImportMp3(e.target.files?.[0] ?? null)} />
               </label>
-              <label className="text-[10px] text-zinc-500">
-                Video (opcional)
-                <input
-                  ref={vidRef}
-                  type="file"
-                  accept="video/*"
-                  className="mt-0.5 block w-full text-[10px] text-zinc-600 file:mr-1 file:rounded file:border-0 file:bg-zinc-100 file:px-1.5 file:py-0.5 file:text-[10px] dark:file:bg-zinc-700 dark:file:text-zinc-300"
-                  onChange={(e) => setImportVideo(e.target.files?.[0] ?? null)}
-                />
+              <label className="text-xs text-zinc-400">
+                {t("sidebar.fileVideo")}
+                <input ref={vidRef} type="file" accept="video/*" className={fileInput}
+                  onChange={(e) => setImportVideo(e.target.files?.[0] ?? null)} />
               </label>
               <button
                 onClick={handleImportSubmit}
                 disabled={!importTxt || !importMp3 || importing}
-                className="mt-0.5 rounded bg-zinc-900 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                className="btn btn-primary w-full !py-2 text-xs"
               >
-                {importing ? "Importando…" : "Importar"}
+                {importing ? t("sidebar.importing") : t("sidebar.import")}
               </button>
             </div>
           )}
         </div>
-
-        <div className="flex flex-col gap-1 overflow-y-auto px-2 pt-2 pb-4">
-          {drafts.length === 0 && (
-            <p className="px-1 py-4 text-center text-xs text-zinc-400">
-              Sin borradores
-            </p>
-          )}
-          {drafts.map((d) => (
-            <div
-              key={d.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => onLoad(d.id)}
-              onKeyDown={(e) => e.key === "Enter" && onLoad(d.id)}
-              className={`group relative flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                d.id === currentDraftId
-                  ? "bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-950 dark:ring-blue-700"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <span className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                {d.title || "Sin título"}
-              </span>
-              <span className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">
-                {d.artist || "—"}
-              </span>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-400">
-                  {fmt(d.savedAt)}
-                </span>
-                {d.hasVideo && (
-                  <span className="rounded bg-zinc-200 px-1 text-[9px] font-medium text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">
-                    video
-                  </span>
-                )}
-              </div>
-
-              {/* Delete button */}
-              <button
-                onClick={(e) => handleDelete(e, d.id)}
-                disabled={deleting === d.id}
-                title="Eliminar borrador"
-                className="absolute right-2 top-2 hidden rounded p-0.5 text-zinc-300 hover:bg-red-50 hover:text-red-500 group-hover:flex dark:text-zinc-600 dark:hover:bg-red-950 dark:hover:text-red-400"
-              >
-                <svg
-                  className="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-      </>
+      </div>
     </aside>
   );
 }

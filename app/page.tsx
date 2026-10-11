@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import FileUpload from "./components/FileUpload";
+import SourceSelector from "./components/SourceSelector";
+import SetupScreen from "./components/SetupScreen";
+import SettingsPanel from "./components/SettingsPanel";
+import { useI18n } from "./i18n/I18nProvider";
+import type { MessageKey } from "./i18n";
+import type { YoutubeResult } from "./components/YoutubeInput";
 import LyricsInput from "./components/LyricsInput";
 import GenerateButton from "./components/GenerateButton";
 import DownloadPanel from "./components/DownloadPanel";
@@ -26,6 +31,8 @@ function Spinner() {
 }
 
 export default function Home() {
+  const { t } = useI18n();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
 
   const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
@@ -38,6 +45,8 @@ export default function Home() {
   const [lyrics, setLyrics] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [savedTo, setSavedTo] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [transcribed, setTranscribed] = useState(false);
   const [currentStage, setCurrentStage] = useState("");
@@ -50,6 +59,16 @@ export default function Home() {
   const [aligning, setAligning] = useState(false);
 
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  // First run: the Python environment and models are installed from here when missing.
+  const [setupStatus, setSetupStatus] = useState<{ ready: boolean; home: string; cuda: boolean; gpuName: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/setup/status")
+      .then((r) => r.json())
+      .then((s) => { if (!cancelled) setSetupStatus(s); })
+      .catch(() => { /* status unavailable: assume ready, errors surface later */ });
+    return () => { cancelled = true; };
+  }, []);
   const [draftsRefreshKey, setDraftsRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
   // true when audio is already on the server (from a saved draft or prior upload)
@@ -95,9 +114,40 @@ export default function Home() {
   const busy = phase === "uploading" || phase === "transcribing" || phase === "generating";
   const canProcess = (!!pendingAudioFile || hasUploadedAudio) && !!title.trim() && !!artist.trim() && !!lyrics.trim() && !busy;
   const canAct = transcribed && !!lyrics.trim() && !!title.trim() && !!artist.trim() && !busy;
+  // The timeline editor works on existing notes: imported songs have no lyrics text and still open.
+  const canEdit = transcribed && !busy && (!!alignResult || !!lyrics.trim());
 
   const fmtTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  // ── Persist a draft ──────────────────────────────────────────────────────
+  // Shared by the manual "Guardar borrador" button and the automatic save after processing.
+  const persistDraft = useCallback(
+    async (ar: AlignResult, tr: TranscribeResult, up: UploadResult, draftId: string | null): Promise<string | null> => {
+      const res = await fetch("/api/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId: draftId ?? undefined,
+          title, artist, lyrics,
+          bpm: ar.bpm, gap: ar.gap, notes: ar.notes,
+          words: tr.words,
+          language: tr.language,
+          pauses: tr.pauses ?? [],
+          mp3: up.mp3,
+          videoPath: up.videoPath,
+          vocalsPath: up.vocalsPath,
+          accompanimentPath: up.accompanimentPath,
+        }),
+      });
+      if (!res.ok) return null;
+      const { id } = await res.json();
+      setCurrentDraftId(id);
+      setDraftsRefreshKey((k) => k + 1);
+      return id as string;
+    },
+    [title, artist, lyrics]
+  );
 
   // ── Save draft ───────────────────────────────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
@@ -122,31 +172,11 @@ export default function Home() {
       }
       if (!ar) return;
 
-      const res = await fetch("/api/drafts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          draftId: currentDraftId ?? undefined,
-          title, artist, lyrics,
-          bpm: ar.bpm, gap: ar.gap, notes: ar.notes,
-          words: transcribeRef.current.words,
-          language: transcribeRef.current.language,
-          pauses: transcribeRef.current.pauses ?? [],
-          mp3: uploadRef.current.mp3,
-          videoPath: uploadRef.current.videoPath,
-          vocalsPath: uploadRef.current.vocalsPath,
-          accompanimentPath: uploadRef.current.accompanimentPath,
-        }),
-      });
-      if (res.ok) {
-        const { id } = await res.json();
-        setCurrentDraftId(id);
-        setDraftsRefreshKey((k) => k + 1);
-      }
+      await persistDraft(ar, transcribeRef.current, uploadRef.current, currentDraftId);
     } finally {
       setSaving(false);
     }
-  }, [alignResult, title, artist, lyrics, currentDraftId]);
+  }, [alignResult, lyrics, currentDraftId, persistDraft]);
 
   // ── Load draft ───────────────────────────────────────────────────────────
   const handleLoadDraft = useCallback(async (id: string) => {
@@ -201,14 +231,14 @@ export default function Home() {
     if (videoFile) fd.append("video", videoFile);
     const res = await fetch("/api/import", { method: "POST", body: fd });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: "Import failed" }));
+      const err = await res.json().catch(() => ({ message: t("error.importFailed") }));
       setError(err.message);
       return;
     }
     const { id } = await res.json();
     setDraftsRefreshKey((k) => k + 1);
     await handleLoadDraft(id);
-  }, [handleLoadDraft]);
+  }, [handleLoadDraft, t]);
 
   // ── File selection ───────────────────────────────────────────────────────
   const handleFile = useCallback((file: File) => {
@@ -232,6 +262,26 @@ export default function Home() {
     setVideoFilename(file.name);
   }, []);
 
+  // Audio + video already on the server (downloaded from YouTube): no upload step needed.
+  const handleYoutube = useCallback((r: YoutubeResult) => {
+    setPendingAudioFile(null);
+    setPendingVideoFile(null);
+    setFilename(r.title || "YouTube");
+    setVideoFilename(r.title || "YouTube");
+    uploadRef.current = { id: r.id, mp3: r.mp3, videoPath: r.videoPath };
+    transcribeRef.current = null;
+    setHasUploadedAudio(true);
+    setTranscribed(false);
+    setDownloadUrl(null);
+    setEditorOpen(false);
+    setAlignResult(null);
+    setAudioUrl(null);
+    setVideoUrl(null);
+    setError(null);
+    setCurrentStage("");
+    setTitle((prev) => prev || r.title);
+  }, []);
+
   // ── Procesar ─────────────────────────────────────────────────────────────
   const handleProcess = useCallback(async () => {
     if (!pendingAudioFile && !uploadRef.current) return;
@@ -240,13 +290,16 @@ export default function Home() {
     setEditorOpen(false);
     setAlignResult(null);
     setTranscribed(false);
+    // Keep the form on screen while processing: with transcribed=false and the form closed
+    // (the case when re-processing a loaded draft) the page would fall back to the home screen.
+    setNewFormOpen(true);
     transcribeRef.current = null;
 
     try {
       // 1 — upload (skip if audio already on server from a draft/prior upload)
       if (pendingAudioFile) {
         setPhase("uploading");
-        setCurrentStage("Subiendo archivo…");
+        setCurrentStage(t("stage.uploadingFile"));
         uploadRef.current = null;
         const fd = new FormData();
         fd.append("file", pendingAudioFile);
@@ -259,8 +312,8 @@ export default function Home() {
 
       // 2 — transcribe via SSE stream
       setPhase("transcribing");
-      setCurrentStage("Conectando…");
-      if (!uploadRef.current) throw new Error("No hay audio para procesar");
+      setCurrentStage(t("stage.connecting"));
+      if (!uploadRef.current) throw new Error(t("error.noAudio"));
 
       // Short timeout only for the initial connection — once the stream starts
       // we clear it so it never cancels an in-progress transcription.
@@ -278,7 +331,7 @@ export default function Home() {
       } catch (fetchErr) {
         clearTimeout(connectTimeout);
         const isAbort = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
-        throw new Error(isAbort ? "El servicio no respondió en 60 s — ¿está corriendo Python?" : "No se pudo conectar al servicio de transcripción");
+        throw new Error(isAbort ? t("error.serviceTimeout") : t("error.serviceConnect"));
       }
       clearTimeout(connectTimeout); // connected — release the abort signal
 
@@ -295,7 +348,7 @@ export default function Home() {
         try {
           chunk = await reader.read();
         } catch {
-          throw new Error("Se cortó la conexión con el servicio durante el procesamiento");
+          throw new Error(t("error.streamCut"));
         }
         if (chunk.done) break;
 
@@ -307,19 +360,19 @@ export default function Home() {
           if (!line.startsWith("data: ")) continue;
           let data: Record<string, unknown>;
           try { data = JSON.parse(line.slice(6)); } catch { continue; }
-          if (data.stage) setCurrentStage(data.stage as string);
+          if (data.stage) setCurrentStage(data.stageKey ? t(data.stageKey as MessageKey) : (data.stage as string));
           if (data.error) throw new Error(data.error as string);
           if (data.done) { result = data as unknown as TranscribeResult; break outer; }
         }
       }
 
-      if (!result) throw new Error("El servicio no devolvió resultado");
+      if (!result) throw new Error(t("error.noResult"));
 
       transcribeRef.current = result;
       if (result.vocalsPath) uploadRef.current!.vocalsPath = result.vocalsPath;
       if (result.accompanimentPath) uploadRef.current!.accompanimentPath = result.accompanimentPath;
 
-      setCurrentStage("Alineando letra...");
+      setCurrentStage(t("stage.aligning"));
       const alignRes = await fetch("/api/align", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -332,22 +385,34 @@ export default function Home() {
         }),
       });
       if (!alignRes.ok) throw new Error((await alignRes.json()).message);
-      setAlignResult(await alignRes.json());
+      const aligned: AlignResult = await alignRes.json();
+      setAlignResult(aligned);
+
+      // A new song is saved as a draft right away: processing takes minutes and the result would
+      // otherwise be lost on closing the app. Re-processing an existing draft is not saved silently,
+      // since that would overwrite notes the user may have edited ("Actualizar borrador" does it).
+      if (!currentDraftId) {
+        try {
+          await persistDraft(aligned, result, uploadRef.current!, null);
+        } catch {
+          /* the draft can still be saved by hand */
+        }
+      }
 
       setAudioUrl(`/api/audio?mp3=${encodeURIComponent(uploadRef.current!.mp3)}`);
       if (uploadRef.current!.videoPath) {
         setVideoUrl(`/api/video?path=${encodeURIComponent(uploadRef.current!.videoPath)}`);
       }
 
-      setCurrentStage("Listo");
+      setCurrentStage(t("stage.done"));
       setTranscribed(true);
       setReprocessOpen(false);
       setPhase("idle");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falló el procesamiento");
+      setError(err instanceof Error ? err.message : t("error.processFailed"));
       setPhase("error");
     }
-  }, [pendingAudioFile, pendingVideoFile, lyrics]);
+  }, [pendingAudioFile, pendingVideoFile, lyrics, currentDraftId, persistDraft, t]);
 
   // ── Quick generate ───────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -372,15 +437,19 @@ export default function Home() {
         }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
+      const saved = res.headers.get("X-Saved-To");
+      const saveErr = res.headers.get("X-Save-Error");
+      setSavedTo(saved ? decodeURIComponent(saved) : null);
+      setSaveError(saveErr ? decodeURIComponent(saveErr) : null);
       const url = URL.createObjectURL(await res.blob());
       prevDownloadUrl.current = url;
       setDownloadUrl(url);
       setPhase("done");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falló la generación");
+      setError(err instanceof Error ? err.message : t("error.generateFailed"));
       setPhase("error");
     }
-  }, [lyrics, title, artist]);
+  }, [lyrics, title, artist, t]);
 
   // ── Open timeline editor ─────────────────────────────────────────────────
   const handleOpenEditor = useCallback(async () => {
@@ -405,11 +474,11 @@ export default function Home() {
       setAlignResult(await res.json());
       setEditorOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falló el alineado");
+      setError(err instanceof Error ? err.message : t("error.alignFailed"));
     } finally {
       setAligning(false);
     }
-  }, [lyrics, alignResult]);
+  }, [lyrics, alignResult, t]);
 
   // ── Export from editor ───────────────────────────────────────────────────
   const handleEditorExport = useCallback(async (notes: EditorNote[], bpm: number, gap: number) => {
@@ -430,17 +499,30 @@ export default function Home() {
         }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
+      const saved = res.headers.get("X-Saved-To");
+      const saveErr = res.headers.get("X-Save-Error");
+      setSavedTo(saved ? decodeURIComponent(saved) : null);
+      setSaveError(saveErr ? decodeURIComponent(saveErr) : null);
       const url = URL.createObjectURL(await res.blob());
       prevDownloadUrl.current = url;
       setDownloadUrl(url);
       setPhase("done");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falló la generación");
+      setError(err instanceof Error ? err.message : t("error.generateFailed"));
       setPhase("error");
     }
-  }, [title, artist]);
+  }, [title, artist, t]);
 
   // ── Render ───────────────────────────────────────────────────────────────
+
+  if (setupStatus && !setupStatus.ready) {
+    return (
+      <SetupScreen
+        status={setupStatus}
+        onDone={() => setSetupStatus({ ...setupStatus, ready: true })}
+      />
+    );
+  }
 
   // Full-screen editor mode — hides everything else
   if (editorOpen && alignResult && audioUrl) {
@@ -467,6 +549,7 @@ export default function Home() {
     <div className="flex min-h-dvh">
       <DraftsSidebar
         onHome={() => {
+          setSettingsOpen(false);
           setTranscribed(false);
           setNewFormOpen(false);
           setAlignResult(null);
@@ -480,7 +563,16 @@ export default function Home() {
           uploadRef.current = null;
           transcribeRef.current = null;
         }}
-        onLoad={handleLoadDraft}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onLoad={(id) => {
+          setSettingsOpen(false);
+          return handleLoadDraft(id);
+        }}
+        onLibraryImport={async (id) => {
+          setSettingsOpen(false);
+          setDraftsRefreshKey((k) => k + 1);
+          await handleLoadDraft(id);
+        }}
         onImport={handleImportTxt}
         refreshKey={draftsRefreshKey}
         currentDraftId={currentDraftId}
@@ -489,13 +581,20 @@ export default function Home() {
     <div className="flex flex-1 flex-col min-w-0 pl-64">
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-12">
 
+      {settingsOpen && (
+        <SettingsPanel
+          onBack={() => setSettingsOpen(false)}
+          onSongsFolderChanged={() => setDraftsRefreshKey((k) => k + 1)}
+        />
+      )}
+
       {/* ── MODE A: no song yet ── */}
-      {!transcribed && !newFormOpen && (
+      {!settingsOpen && !transcribed && !newFormOpen && (
         <div className="flex flex-col items-center justify-center gap-8 py-16">
-          <img src="/ultrasong.png" alt="Ultrasong" className="w-80 object-contain drop-shadow-md" />
+          <img src="/ultrasong.png" alt="Ultrasongs" className="w-96 max-w-full object-contain drop-shadow-md" />
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="text-sm text-zinc-400 dark:text-zinc-500">
-              Generá archivos Ultrastar Deluxe desde audio + letra
+              {t("app.tagline")}
             </p>
           </div>
           <button
@@ -513,18 +612,18 @@ export default function Home() {
               setHasUploadedAudio(false);
               setNewFormOpen(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white shadow transition-colors hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="btn btn-primary px-6 py-3"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Nueva canción
+            {t("action.newSong")}
           </button>
         </div>
       )}
 
       {/* ── MODE A: new song form ── */}
-      {!transcribed && newFormOpen && (
+      {!settingsOpen && !transcribed && newFormOpen && (
         <section className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
             <button
@@ -534,31 +633,25 @@ export default function Home() {
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
-              Volver
+              {t("action.back")}
             </button>
-            <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Nueva canción</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">{t("newSong.title")}</h2>
           </div>
 
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Audio</h3>
-            <FileUpload onFile={handleFile} disabled={busy} filename={filename || undefined} />
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-              <span className="text-xs text-zinc-400">+ video opcional (sin audio)</span>
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-            </div>
-            <FileUpload
-              onFile={handleVideoFile}
+            <h3 className="section-label">{t("section.audio")}</h3>
+            <SourceSelector
+              onFile={handleFile}
+              onVideoFile={handleVideoFile}
+              onYoutube={handleYoutube}
               disabled={busy}
-              filename={videoFilename || undefined}
-              accept="video"
-              label="Drop video file here (optional)"
-              sublabel="mp4, mkv, webm, mov — used as background in Ultrastar"
+              filename={filename || undefined}
+              videoFilename={videoFilename || undefined}
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Info &amp; letra</h3>
+            <h3 className="section-label">{t("section.infoLyrics")}</h3>
             <LyricsInput
               title={title} artist={artist} lyrics={lyrics}
               onTitle={setTitle} onArtist={setArtist} onLyrics={setLyrics}
@@ -569,18 +662,18 @@ export default function Home() {
           <button
             onClick={handleProcess}
             disabled={!canProcess}
-            className="flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="btn btn-primary w-full py-3"
           >
-            {busy ? <><Spinner />{phase === "uploading" ? "Subiendo…" : "Procesando…"}</> : "Procesar"}
+            {busy ? <><Spinner />{phase === "uploading" ? t("process.uploading") : t("process.processing")}</> : t("process.start")}
           </button>
 
           {(phase === "uploading" || phase === "transcribing") && currentStage && (
-            <div className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/50">
+            <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5">
               <Spinner />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">{currentStage}</span>
                 {phase === "transcribing" && transcribeElapsed > 0 && (
-                  <span className="text-[10px] text-zinc-400">{fmtTime(transcribeElapsed)} transcurrido</span>
+                  <span className="text-[10px] text-zinc-400">{t("process.elapsed", { time: fmtTime(transcribeElapsed) })}</span>
                 )}
               </div>
             </div>
@@ -593,13 +686,13 @@ export default function Home() {
       )}
 
       {/* ── MODE B: song ready — info card + actions ── */}
-      {transcribed && (
+      {!settingsOpen && transcribed && (
         <section className="flex flex-col gap-3">
           {/* Song info card */}
-          <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+          <div className="card flex flex-col gap-3 p-5">
             <div>
-              <p className="text-base font-semibold text-zinc-900 dark:text-zinc-50">{title}</p>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">{artist}</p>
+              <p className="text-xl font-semibold tracking-tight text-zinc-50">{title}</p>
+              <p className="text-sm text-zinc-400">{artist}</p>
             </div>
 
             {videoUrl && (
@@ -628,54 +721,48 @@ export default function Home() {
             <GenerateButton phase={phase} onClick={handleGenerate} disabled={!canAct} />
             <button
               onClick={handleOpenEditor}
-              disabled={!canAct || aligning}
-              className="flex items-center justify-center gap-2 rounded-xl border border-zinc-300 px-4 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              disabled={!canEdit || aligning}
+              className="btn btn-secondary w-full"
             >
               {aligning ? <Spinner /> : (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                 </svg>
               )}
-              Editar Timeline
+              {t("song.editTimeline")}
             </button>
           </div>
 
-          <DownloadPanel url={downloadUrl} title={title} error={error} />
+          <DownloadPanel url={downloadUrl} title={title} error={error} savedTo={savedTo} saveError={saveError} />
 
           {/* Re-process expander */}
           <button
             onClick={() => setReprocessOpen((v) => !v)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            className="btn btn-dashed w-full font-medium"
           >
             <svg className={`h-4 w-4 transition-transform ${reprocessOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
-            Modificar / Re-procesar
+            {t("song.modify")}
           </button>
 
           {/* Collapsible re-process form */}
           {reprocessOpen && (
-            <div className="flex flex-col gap-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <div className="card flex flex-col gap-4 p-5">
               <div className="flex flex-col gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Audio</h3>
-                <FileUpload onFile={handleFile} disabled={busy} filename={filename || undefined} />
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-                  <span className="text-xs text-zinc-400">+ video opcional (sin audio)</span>
-                  <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-                </div>
-                <FileUpload
-                  onFile={handleVideoFile}
+                <h3 className="section-label">{t("section.audio")}</h3>
+                <SourceSelector
+                  onFile={handleFile}
+                  onVideoFile={handleVideoFile}
+                  onYoutube={handleYoutube}
                   disabled={busy}
-                  filename={videoFilename || undefined}
-                  accept="video"
-                  label="Drop video file here (optional)"
-                  sublabel="mp4, mkv, webm, mov — used as background in Ultrastar"
+                  filename={filename || undefined}
+                  videoFilename={videoFilename || undefined}
                 />
               </div>
 
               <div className="flex flex-col gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Info &amp; letra</h3>
+                <h3 className="section-label">{t("section.infoLyrics")}</h3>
                 <LyricsInput
                   title={title} artist={artist} lyrics={lyrics}
                   onTitle={setTitle} onArtist={setArtist} onLyrics={setLyrics}
@@ -686,31 +773,31 @@ export default function Home() {
               <button
                 onClick={handleSaveDraft}
                 disabled={saving}
-                className="flex items-center justify-center gap-2 rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                className="btn btn-secondary w-full"
               >
                 {saving ? <Spinner /> : (
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
                 )}
-                {currentDraftId ? "Actualizar borrador" : "Guardar borrador"}
+                {currentDraftId ? t("song.updateDraft") : t("song.saveDraft")}
               </button>
 
               <button
                 onClick={handleProcess}
                 disabled={!canProcess}
-                className="flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                className="btn btn-primary w-full py-3"
               >
-                {busy ? <><Spinner />{phase === "uploading" ? "Subiendo…" : "Procesando…"}</> : "Re-procesar"}
+                {busy ? <><Spinner />{phase === "uploading" ? t("process.uploading") : t("process.processing")}</> : t("process.reprocess")}
               </button>
 
               {(phase === "uploading" || phase === "transcribing") && currentStage && (
-                <div className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/50">
+                <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5">
                   <Spinner />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200">{currentStage}</span>
                     {phase === "transcribing" && transcribeElapsed > 0 && (
-                      <span className="text-[10px] text-zinc-400">{fmtTime(transcribeElapsed)} transcurrido</span>
+                      <span className="text-[10px] text-zinc-400">{t("process.elapsed", { time: fmtTime(transcribeElapsed) })}</span>
                     )}
                   </div>
                 </div>
