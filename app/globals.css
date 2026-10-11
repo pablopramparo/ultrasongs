@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Dark-only theme (see design-assets/). `dark:` variants follow the `.dark` class on <html>, which
+ * the root layout always sets, instead of the OS preference.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * The app is styled with Tailwind's zinc/blue scales; remapping them to the palette gives every
+ * screen the new look at once:
+ *   950 background · 900 panel · 800 borders · 400 secondary text · 100 text
+ *   blue-600 primary · purple-500 accent
+ */
+@theme {
+  --color-zinc-50: #f3f4f6;
+  --color-zinc-100: #e5e7eb;
+  --color-zinc-200: #d4d7de;
+  --color-zinc-300: #bcc1cc;
+  --color-zinc-400: #9ca3af;
+  --color-zinc-500: #8a90a0; /* secondary text: ≥ 4.5:1 on the panel colour */
+  --color-zinc-600: #4b5063;
+  --color-zinc-700: #34374a;
+  --color-zinc-800: #252735;
+  --color-zinc-900: #1a1b22;
+  --color-zinc-950: #0d0e12;
+
+  --color-blue-500: #5b9bf8;
+  --color-blue-600: #3b82f6;
+  --color-blue-700: #2f6fdb;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+}
+
+:root {
+  color-scheme: dark;
+  --background: #0d0e12;
+  --foreground: #e5e7eb;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin dark scrollbars (Chromium / WebView2) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #34374a transparent;
+}
+
+::selection {
+  background: rgb(59 130 246 / 0.35);
+}
+
+@layer base {
+  /* One visible focus style for every control; component classes with their own ring override it */
+  :where(button, [role="button"], a, select, input, textarea, summary):focus-visible {
+    outline: 2px solid rgb(59 130 246 / 0.65);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+      transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60
+      disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply bg-blue-600 text-white shadow-sm shadow-blue-950/50 hover:bg-blue-500;
+  }
+  .btn-secondary {
+    @apply border border-zinc-800 bg-zinc-900 text-zinc-100 hover:border-zinc-700 hover:bg-zinc-800;
+  }
+  .btn-dashed {
+    @apply border border-dashed border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-100;
+  }
+  .field {
+    @apply w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100
+      placeholder:text-zinc-500 transition-colors focus:border-blue-500 focus:outline-none
+      focus:ring-2 focus:ring-blue-500/25 disabled:opacity-50;
+  }
+  .card {
+    @apply rounded-xl border border-zinc-800 bg-zinc-900;
+  }
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-zinc-400;
+  }
+}
+
+/* Themed range input used by the media player (fill is painted via inline gradient) */
+.player-range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  cursor: pointer;
+  outline: none;
+}
+.player-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+.player-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+  border: 2px solid #3b82f6;
+}
+.player-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.4);
 }

@@ -9,7 +9,7 @@ import { createConnection } from "net";
 import { spawn } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 
 const PORT = 8001;
 const PYTHON_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../python");
@@ -45,6 +45,10 @@ const extraEnv = Object.fromEntries(
   PYTHON_VARS.filter((k) => envLocal[k]).map((k) => [k, envLocal[k]])
 );
 
+// Prefer the project's single venv (python/.venv); fall back to whatever `python` is on PATH.
+const VENV_PYTHON = resolve(PYTHON_DIR, ".venv", "Scripts", "python.exe");
+const PYTHON = existsSync(VENV_PYTHON) ? VENV_PYTHON : "python";
+
 function portOpen(port) {
   return new Promise((resolve) => {
     const s = createConnection({ port, host: "127.0.0.1" });
@@ -62,7 +66,7 @@ if (already) {
   process.stdin.resume();
 } else {
   const proc = spawn(
-    "python",
+    PYTHON,
     ["-m", "uvicorn", "transcribe_service:app", "--port", String(PORT), "--reload"],
     { cwd: PYTHON_DIR, stdio: "inherit", env: { ...process.env, ...extraEnv } }
   );

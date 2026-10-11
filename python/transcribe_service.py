@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 
+import hf_compat  # noqa: F401 - Windows symlink fix, see hf_compat.py
 import lameenc
 import numpy as np
 import soundfile as sf
@@ -42,8 +43,10 @@ print("[startup] WhisperX ready" if ALIGN_ENGINE == "whisperx" else "[startup] W
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def sse(stage: str) -> str:
-    return f"data: {json.dumps({'stage': stage})}\n\n"
+def sse(stage: str, key: str | None = None) -> str:
+    """`stage` is the Spanish fallback text; `stageKey` lets the UI show it in its own language."""
+    payload = {"stage": stage, **({"stageKey": key} if key else {})}
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 def hz_to_midi(hz: float) -> int:
@@ -166,9 +169,10 @@ def add_pitch_to_words(raw_words, times, freqs, confs) -> list:
 def transcribe_with_whisperx(vocals_wav_path: str, prompt: str = "") -> tuple[list, str]:
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.abspath(os.path.join(here, ".."))
-    default_python = os.path.join(here, ".venv-whisperx", "Scripts", "python.exe")
     worker = os.path.join(here, "whisperx_worker.py")
-    python_exe = os.environ.get("WHISPERX_PYTHON", default_python)
+    # Single environment: the worker runs in the same interpreter as this service.
+    # WHISPERX_PYTHON still lets a separate venv be used (legacy two-env setup).
+    python_exe = os.environ.get("WHISPERX_PYTHON") or sys.executable
 
     if not os.path.exists(python_exe):
         raise RuntimeError(f"WhisperX Python not found: {python_exe}")
@@ -197,6 +201,8 @@ def transcribe_with_whisperx(vocals_wav_path: str, prompt: str = "") -> tuple[li
         text=True,
         capture_output=True,
         check=False,
+        # No console window when this service runs under the desktop app (Windows only).
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     if proc.stderr:
         print(proc.stderr.strip())
@@ -281,7 +287,7 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
 
                 audio, sr = await asyncio.to_thread(load_audio)
 
-                await queue.put(sse("Separando voz de la música…"))
+                await queue.put(sse("Separando voz de la música…", "stage.separating"))
                 vocals, accompaniment, out_sr = await asyncio.to_thread(separate_all, audio, sr)
 
                 if DEVICE == "cuda":
@@ -296,7 +302,7 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
 
                 await asyncio.to_thread(save_stems)
 
-                await queue.put(sse("Detectando pitch con torchcrepe…"))
+                await queue.put(sse("Detectando pitch con torchcrepe…", "stage.pitch"))
                 times, freqs, confs = await asyncio.to_thread(analyze_pitch, vocals, out_sr)
                 pct = 100 * (confs > 0.5).sum() / max(len(confs), 1)
                 print(f"[transcribe] Pitch: {len(times)} frames, {pct:.0f}% confident")
@@ -309,7 +315,7 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
                 pauses = await asyncio.to_thread(detect_pauses, vocals, out_sr)
                 print(f"[transcribe] Pauses: {len(pauses)} silence regions detected")
 
-                await queue.put(sse("Transcribiendo letra con Whisper…"))
+                await queue.put(sse("Transcribiendo letra con Whisper…", "stage.transcribing"))
                 prompt = lyrics.strip() if lyrics.strip() else None
 
                 def do_whisper():

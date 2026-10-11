@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { apiError } from "@/app/lib/apiResponse";
 import { existsSync } from "fs";
 import path from "path";
 import { resolveAllowed, serveFile } from "@/app/lib/safePath";
@@ -7,16 +8,16 @@ export async function GET(request: NextRequest) {
   const videoParam = request.nextUrl.searchParams.get("path");
 
   if (!videoParam) {
-    return NextResponse.json({ message: "Missing path param" }, { status: 400 });
+    return apiError("api.missingParam", 400, { name: "path" });
   }
 
   const resolved = resolveAllowed(videoParam);
   if (!resolved) {
-    return NextResponse.json({ message: "Invalid path" }, { status: 403 });
+    return apiError("api.invalidPath", 403);
   }
 
   if (!existsSync(resolved)) {
-    return NextResponse.json({ message: "File not found" }, { status: 404 });
+    return apiError("api.fileNotFound", 404);
   }
 
   const ext = path.extname(resolved).toLowerCase();

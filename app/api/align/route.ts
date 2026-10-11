@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { existsSync } from "fs";
 import { alignLyrics } from "@/app/lib/align";
 import { detectBpm } from "@/app/lib/ultrastar";
@@ -19,14 +20,14 @@ export async function POST(request: NextRequest) {
     const { mp3: mp3Param, words, language, lyrics, pauses }: AlignRequest = await request.json();
 
     if (!mp3Param || !words?.length || !lyrics) {
-      return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
+      return apiError("api.missingFields", 400);
     }
     const mp3 = resolveAllowed(mp3Param);
     if (!mp3) {
-      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
+      return apiError("api.invalidPath", 403);
     }
     if (!existsSync(mp3)) {
-      return NextResponse.json({ message: "Audio file not found" }, { status: 404 });
+      return apiError("api.audioNotFound", 404);
     }
 
     const [aligned, { bpm }] = await Promise.all([
@@ -36,16 +37,25 @@ export async function POST(request: NextRequest) {
 
     const duration = words.at(-1)?.end ?? 0;
 
-    const notes: EditorNote[] = aligned
-      .filter((s) => !s.isLineBreak)
-      .map((s, i) => ({
-        id: `n${i}`,
+    // Each line of the lyrics is a phrase: the first note after a line break opens one.
+    const notes: EditorNote[] = [];
+    let opensPhrase = false;
+    for (const s of aligned) {
+      if (s.isLineBreak) {
+        opensPhrase = notes.length > 0;
+        continue;
+      }
+      notes.push({
+        id: `n${notes.length}`,
         syllable: s.syllable,
         startSec: s.start,
         durationSec: Math.max(0.1, s.end - s.start),
         pitch: s.midi,
         type: ":" as const,
-      }));
+        lineStart: opensPhrase,
+      });
+      opensPhrase = false;
+    }
 
     // GAP = first note start minus a small lead-in (ms)
     const firstStart = notes[0]?.startSec ?? 0;
@@ -54,9 +64,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ notes, bpm, gap, duration });
   } catch (err) {
     console.error("[align]", err);
-    return NextResponse.json(
-      { message: err instanceof Error ? err.message : "Alignment failed" },
-      { status: 500 }
-    );
+    return apiFailure(err, "error.alignFailed", 500);
   }
 }

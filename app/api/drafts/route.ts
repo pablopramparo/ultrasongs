@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { readdir, readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
@@ -30,7 +31,7 @@ export async function GET() {
     drafts.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
     return NextResponse.json(drafts);
   } catch (err) {
-    return NextResponse.json({ message: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return apiFailure(err, "api.genericFailed", 500);
   }
 }
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     const id: string = draftId ?? crypto.randomUUID();
     const dir = draftDir(id);
-    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+    if (!dir) return apiError("api.invalidDraftId", 400);
 
     // Source files must live inside TMP_DIR / DRAFTS_DIR — never copy arbitrary client paths.
     const mp3Src = resolveAllowed(mp3);
@@ -91,6 +92,6 @@ export async function POST(request: NextRequest) {
     await writeFile(path.join(dir, "draft.json"), JSON.stringify(draft));
     return NextResponse.json({ id });
   } catch (err) {
-    return NextResponse.json({ message: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return apiFailure(err, "api.genericFailed", 500);
   }
 }

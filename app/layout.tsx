@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { I18nProvider } from "./i18n/I18nProvider";
+import { getRequestLang } from "./i18n/server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,17 +20,21 @@ export const metadata: Metadata = {
   icons: { icon: "/favico.png" },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const lang = await getRequestLang();
+
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang={lang}
+      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <I18nProvider initialLang={lang}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

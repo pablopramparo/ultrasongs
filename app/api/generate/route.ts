@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import JSZip from "jszip";
 import { alignLyrics } from "@/app/lib/align";
-import { msToBeats, buildUltrastarTxt, detectBpm } from "@/app/lib/ultrastar";
+import { msToBeats, buildUltrastarTxt, detectBpm, editorNotesToUltrastar } from "@/app/lib/ultrastar";
 import type { WordTimestamp, Pause } from "@/app/api/transcribe/route";
 import type { UltrastarNote } from "@/app/lib/ultrastar";
 import type { EditorNote } from "@/app/lib/editorNote";
 import { resolveAllowed } from "@/app/lib/safePath";
+import { saveSongFolder } from "@/app/lib/songFolder";
+import { errorMessage } from "@/app/lib/appError";
+import { getRequestLang } from "@/app/i18n/server";
+import { getSongsDir } from "@/app/lib/settings";
 
 // Mode A: auto-align from raw transcription
 interface GenerateAuto {
@@ -49,14 +54,14 @@ export async function POST(request: NextRequest) {
     const { title, artist } = body;
 
     if (!body.mp3 || !title || !artist) {
-      return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
+      return apiError("api.missingFields", 400);
     }
     const mp3 = resolveAllowed(body.mp3);
     if (!mp3) {
-      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
+      return apiError("api.invalidPath", 403);
     }
     if (!existsSync(mp3)) {
-      return NextResponse.json({ message: "Audio file not found" }, { status: 404 });
+      return apiError("api.audioNotFound", 404);
     }
 
     let bpm: number;
@@ -66,22 +71,12 @@ export async function POST(request: NextRequest) {
     if (isFromEditor(body)) {
       // ── Mode B: editor notes ───────────────────────────────────────────────
       ({ bpm, gap } = body);
-      let prevEnd = -1;
-
-      for (const en of body.editedNotes) {
-        const startBeat = msToBeats(en.startSec * 1000, bpm, gap);
-        const endBeat = msToBeats((en.startSec + en.durationSec) * 1000, bpm, gap);
-        const duration = Math.max(1, endBeat - startBeat);
-        const adjStart = prevEnd >= 0 ? Math.max(startBeat, prevEnd + 1) : startBeat;
-
-        ultraNotes.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
-        prevEnd = adjStart + duration;
-      }
+      ultraNotes.push(...editorNotesToUltrastar(body.editedNotes, bpm, gap));
     } else {
       // ── Mode A: auto-align ─────────────────────────────────────────────────
       const { words, language, lyrics, pauses } = body;
       if (!words?.length || !lyrics) {
-        return NextResponse.json({ message: "Missing words or lyrics" }, { status: 400 });
+        return apiError("api.missingWordsLyrics", 400);
       }
 
       ({ bpm } = await detectBpm(mp3));
@@ -144,18 +139,31 @@ export async function POST(request: NextRequest) {
     }
     const zipBuf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 
-    return new NextResponse(new Uint8Array(zipBuf), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${title}.zip"`,
-      },
-    });
+    const headers: Record<string, string> = {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${title}.zip"`,
+    };
+
+    // Optional: also drop the song folder straight into the configured Songs directory.
+    // A failure here must not lose the ZIP, so it is reported via a header instead.
+    const songsDir = getSongsDir();
+    if (songsDir) {
+      try {
+        const dir = await saveSongFolder({
+          songsDir, title, artist, notes: ultraNotes, bpm, gap,
+          mp3Path: mp3,
+          videoPath: videoPath && existsSync(videoPath) ? videoPath : undefined,
+        });
+        headers["X-Saved-To"] = encodeURIComponent(dir);
+      } catch (saveErr) {
+        console.error("[generate] save to songs folder", saveErr);
+        headers["X-Save-Error"] = encodeURIComponent(errorMessage(saveErr, await getRequestLang(), "settings.saveFailed"));
+      }
+    }
+
+    return new NextResponse(new Uint8Array(zipBuf), { status: 200, headers });
   } catch (err) {
     console.error("[generate]", err);
-    return NextResponse.json(
-      { message: err instanceof Error ? err.message : "Generation failed" },
-      { status: 500 }
-    );
+    return apiFailure(err, "error.generateFailed", 500);
   }
 }

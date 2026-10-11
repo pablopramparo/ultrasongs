@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, DragEvent, ChangeEvent } from "react";
+import { useI18n } from "@/app/i18n/I18nProvider";
 
 const AUDIO_ACCEPTED = ".mp3,.mp4,.mkv,.webm,.ogg,.flac,.wav,.m4a,.mov,.avi";
 const VIDEO_ACCEPTED = ".mp4,.mkv,.webm,.mov,.avi";
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function FileUpload({ onFile, disabled, filename, accept = "audio", label, sublabel }: Props) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const accepted = accept === "video" ? VIDEO_ACCEPTED : AUDIO_ACCEPTED;
@@ -61,8 +63,8 @@ export default function FileUpload({ onFile, disabled, filename, accept = "audio
         <span className="font-medium text-zinc-700 dark:text-zinc-300">{filename}</span>
       ) : (
         <>
-          <span className="font-medium">{label ?? "Drop audio / video here"}</span>
-          <span className="text-xs opacity-70">{sublabel ?? "mp3, mp4, mkv, webm, ogg, flac, wav, m4a"}</span>
+          <span className="font-medium">{label ?? t("source.dropAudio")}</span>
+          <span className="text-xs opacity-70">{sublabel ?? t("source.dropAudioHint")}</span>
         </>
       )}
     </div>

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { parseUltrastarTxt } from "@/app/lib/ultrastar";
-import type { EditorNote } from "@/app/lib/editorNote";
+import { ultrastarToEditorNotes } from "@/app/lib/library";
 import { DRAFTS_DIR } from "@/app/lib/safePath";
 
 export async function POST(request: NextRequest) {
@@ -14,25 +15,14 @@ export async function POST(request: NextRequest) {
     const videoFile = form.get("video") as File | null;
 
     if (!txtFile || !mp3File) {
-      return NextResponse.json({ message: "Se requiere el archivo .txt y el .mp3" }, { status: 400 });
+      return apiError("api.importNeedsFiles", 400);
     }
 
     const txtContent = await txtFile.text();
     const parsed = parseUltrastarTxt(txtContent);
 
-    const { bpm, gap, notes } = parsed;
-    const beatsPerSec = (bpm / 60) * 4;
-
-    const editorNotes: EditorNote[] = notes
-      .filter((n) => n.type !== "-")
-      .map((n) => ({
-        id: crypto.randomUUID(),
-        syllable: n.syllable,
-        startSec: gap / 1000 + n.startBeat / beatsPerSec,
-        durationSec: Math.max(0.01, n.duration / beatsPerSec),
-        pitch: n.pitch,
-        type: n.type as ":" | "*",
-      }));
+    const { bpm, gap } = parsed;
+    const editorNotes = ultrastarToEditorNotes(parsed);
 
     const id = crypto.randomUUID();
     const dir = path.join(DRAFTS_DIR, id);
@@ -67,9 +57,6 @@ export async function POST(request: NextRequest) {
     await writeFile(path.join(dir, "draft.json"), JSON.stringify(draft));
     return NextResponse.json({ id });
   } catch (err) {
-    return NextResponse.json(
-      { message: err instanceof Error ? err.message : "Import failed" },
-      { status: 500 }
-    );
+    return apiFailure(err, "error.importFailed", 500);
   }
 }

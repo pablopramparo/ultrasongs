@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { writeFile, mkdir, readFile, unlink } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     const videoFile = formData.get("video");
 
     if ((!file || typeof file === "string") && (!videoFile || typeof videoFile === "string")) {
-      return NextResponse.json({ message: "No file provided" }, { status: 400 });
+      return apiError("api.noFile", 400);
     }
 
     await ensureTmpDir();
@@ -38,14 +39,11 @@ export async function POST(request: NextRequest) {
 
     // ── Audio upload (with optional video) ───────────────────────────────────
     if (!file || typeof file === "string") {
-      return NextResponse.json({ message: "No audio file provided" }, { status: 400 });
+      return apiError("api.noAudioFile", 400);
     }
 
     if (!isSupportedFile(file.name)) {
-      return NextResponse.json(
-        { message: `Unsupported file type: ${path.extname(file.name)}` },
-        { status: 400 }
-      );
+      return apiError("api.unsupportedType", 400, { ext: path.extname(file.name) });
     }
 
     const id = crypto.randomUUID();
@@ -78,9 +76,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     if (rawPath) await unlink(rawPath).catch(() => null);
     console.error("[upload]", err);
-    return NextResponse.json(
-      { message: err instanceof Error ? err.message : "Upload failed" },
-      { status: 500 }
-    );
+    return apiFailure(err, "api.uploadFailed", 500);
   }
 }

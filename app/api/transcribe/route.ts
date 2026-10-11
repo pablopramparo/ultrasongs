@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
+import { ensureService } from "@/app/lib/setup/service";
 import { existsSync } from "fs";
 import { resolveAllowed } from "@/app/lib/safePath";
 
@@ -34,15 +36,18 @@ export async function POST(request: NextRequest) {
     const { mp3: mp3Param, lyrics } = await request.json();
 
     if (!mp3Param || typeof mp3Param !== "string") {
-      return NextResponse.json({ message: "Missing mp3 path" }, { status: 400 });
+      return apiError("api.missingParam", 400, { name: "mp3" });
     }
     const mp3 = resolveAllowed(mp3Param);
     if (!mp3) {
-      return NextResponse.json({ message: "Invalid path" }, { status: 403 });
+      return apiError("api.invalidPath", 403);
     }
     if (!existsSync(mp3)) {
-      return NextResponse.json({ message: "Audio file not found" }, { status: 404 });
+      return apiError("api.audioNotFound", 404);
     }
+
+    // Packaged installs have no one else to start the Python service.
+    await ensureService().catch(() => null);
 
     const formData = new FormData();
     formData.append("mp3_path", mp3);
@@ -60,20 +65,14 @@ export async function POST(request: NextRequest) {
       const msg = fetchErr instanceof Error ? fetchErr.message : "";
       const isDown = /ECONNREFUSED|ENOTFOUND|ECONNRESET|socket hang up|fetch failed/i.test(msg);
       if (isDown) {
-        return NextResponse.json(
-          { message: "Transcription service is not running. Start it with:\n  python -m uvicorn transcribe_service:app --port 8001" },
-          { status: 503 }
-        );
+        return apiError("api.serviceDown", 503);
       }
       throw fetchErr;
     }
 
     if (!serviceRes.ok) {
       const detail = await serviceRes.text();
-      return NextResponse.json(
-        { message: `Transcription service error: ${detail}` },
-        { status: 502 }
-      );
+      return apiError("api.serviceError", 502, { detail });
     }
 
     // Proxy the SSE stream from Python directly to the browser.
@@ -86,9 +85,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("[transcribe]", err);
-    return NextResponse.json(
-      { message: err instanceof Error ? err.message : "Transcription failed" },
-      { status: 500 }
-    );
+    return apiFailure(err, "api.transcribeFailed", 500);
   }
 }
