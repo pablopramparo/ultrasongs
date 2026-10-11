@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { readFile, writeFile, rm } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
@@ -11,10 +12,10 @@ export async function GET(
   try {
     const { id } = await ctx.params;
     const dir = draftDir(id);
-    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+    if (!dir) return apiError("api.invalidDraftId", 400);
     const jsonPath = path.join(dir, "draft.json");
     if (!existsSync(jsonPath)) {
-      return NextResponse.json({ message: "Draft not found" }, { status: 404 });
+      return apiError("api.draftNotFound", 404);
     }
     const data = JSON.parse(await readFile(jsonPath, "utf-8"));
     return NextResponse.json({
@@ -25,7 +26,7 @@ export async function GET(
       accompanimentPath: data.accompanimentFilename ? path.join(dir, data.accompanimentFilename) : undefined,
     });
   } catch (err) {
-    return NextResponse.json({ message: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return apiFailure(err, "api.genericFailed", 500);
   }
 }
 
@@ -36,10 +37,10 @@ export async function PATCH(
   try {
     const { id } = await ctx.params;
     const dir = draftDir(id);
-    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+    if (!dir) return apiError("api.invalidDraftId", 400);
     const jsonPath = path.join(dir, "draft.json");
     if (!existsSync(jsonPath)) {
-      return NextResponse.json({ message: "Draft not found" }, { status: 404 });
+      return apiError("api.draftNotFound", 404);
     }
     const existing = JSON.parse(await readFile(jsonPath, "utf-8"));
     const updates = await req.json();
@@ -47,7 +48,7 @@ export async function PATCH(
     await writeFile(jsonPath, JSON.stringify(merged));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ message: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return apiFailure(err, "api.genericFailed", 500);
   }
 }
 
@@ -58,13 +59,13 @@ export async function DELETE(
   try {
     const { id } = await ctx.params;
     const dir = draftDir(id);
-    if (!dir) return NextResponse.json({ message: "Invalid draft id" }, { status: 400 });
+    if (!dir) return apiError("api.invalidDraftId", 400);
     if (!existsSync(dir)) {
-      return NextResponse.json({ message: "Draft not found" }, { status: 404 });
+      return apiError("api.draftNotFound", 404);
     }
     await rm(dir, { recursive: true, force: true });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ message: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return apiFailure(err, "api.genericFailed", 500);
   }
 }
