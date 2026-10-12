@@ -163,7 +163,7 @@ export default function Home() {
   // ── Load draft ───────────────────────────────────────────────────────────
   const handleLoadDraft = useCallback(async (id: string) => {
     const res = await fetch(`/api/drafts/${id}`);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const draft = await res.json();
 
     setTitle(draft.title ?? "");
@@ -203,6 +203,7 @@ export default function Home() {
     setPhase("idle");
     setPendingAudioFile(null);
     setPendingVideoFile(null);
+    return true;
   }, []);
 
   // ── Import from Ultrastar .txt ───────────────────────────────────────────

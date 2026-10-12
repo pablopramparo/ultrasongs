@@ -29,7 +29,8 @@ interface Props {
   onOpenSettings: () => void;
   /** Called with the new draft id after a song from the Songs folder was imported. */
   onLibraryImport: (id: string) => void;
-  onLoad: (id: string) => void;
+  /** Resolves to false when the draft could not be loaded (it no longer exists). */
+  onLoad: (id: string) => void | Promise<boolean | void>;
   onImport: (txt: File, mp3: File, video: File | null) => void;
   refreshKey: number;
   currentDraftId: string | null;
@@ -57,6 +58,8 @@ export default function DraftsSidebar({
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibrarySong[]>([]);
+  // Bumped when the library list must be fetched again (e.g. after deleting a linked draft)
+  const [libraryReload, setLibraryReload] = useState(0);
   const [libraryConfigured, setLibraryConfigured] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryBusy, setLibraryBusy] = useState<string | null>(null);
@@ -105,17 +108,24 @@ export default function DraftsSidebar({
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, libraryReload]);
 
   // A song with no linked draft becomes a new draft (a copy): ask before doing that.
   const [confirmImport, setConfirmImport] = useState<LibrarySong | null>(null);
   // A linked song whose .txt changed outside the app: ask what to do with the changes.
   const [confirmSync, setConfirmSync] = useState<LibrarySong | null>(null);
 
-  const handleLibraryClick = (song: LibrarySong) => {
-    if (!song.draftId) setConfirmImport(song);
-    else if (song.modified) setConfirmSync(song);
-    else onLoad(song.draftId);
+  const handleLibraryClick = async (song: LibrarySong) => {
+    if (song.draftId) {
+      if (song.modified) {
+        setConfirmSync(song);
+        return;
+      }
+      if ((await onLoad(song.draftId)) !== false) return;
+      // The linked draft is gone (deleted since this list was loaded): offer to create a new one
+      setLibraryReload((n) => n + 1);
+    }
+    setConfirmImport(song);
   };
 
   /** Loads the .txt's notes into the linked draft, then opens it. */
@@ -168,6 +178,8 @@ export default function DraftsSidebar({
     try {
       await fetch(`/api/drafts/${id}`, { method: "DELETE" });
       setDrafts((prev) => prev.filter((d) => d.id !== id));
+      // Songs that were linked to this draft are plain library songs again
+      setLibraryReload((n) => n + 1);
     } finally {
       setDeleting(null);
     }
@@ -258,8 +270,18 @@ export default function DraftsSidebar({
         <Image src="/ultrasong.png" alt="Ultrasongs" width={132} height={86} className="object-contain" priority unoptimized />
       </button>
 
+      {/* Home */}
+      <div className="px-3 pt-3">
+        <button onClick={onHome} className={footerBtn}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 11l9-8 9 8M5 10v10a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V10" />
+          </svg>
+          {t("sidebar.home")}
+        </button>
+      </div>
+
       {/* Drafts */}
-      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+      <div className="flex items-center justify-between px-4 pb-2 pt-3">
         <span className="section-label">{t("sidebar.drafts")}</span>
         {drafts.length > 0 && <span className="text-xs text-zinc-500">{drafts.length}</span>}
       </div>
