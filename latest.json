@@ -1,11 +1,11 @@
 {
-  "version": "0.3.6",
-  "notes": "Export back to a song made elsewhere; license note.",
-  "pub_date": "2026-10-12T22:12:47.060Z",
+  "version": "0.3.7",
+  "notes": "Hand tool, Home button, library refresh, editor tips.",
+  "pub_date": "2026-10-12T22:48:05.619Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0JQNUdyV09hSk5INk5ORjhNckg3UzJOdTY5SitvWHByRGZCVUJ6MytnMW9ONWVPZHFaNGVLVFRoSVhtWUh6aU5DbVdNTXo0NU5PVW5KdmFmbTFZQkE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODQzMTY2CWZpbGU6VWx0cmFzb25nc18wLjMuNl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjYKbUsrckZhS3lsamdJYzJrQzFEL280cWpvb2RMVzZxbGMvV0tsRmZWRndYZ3pqNmorTmRSbUxWT3JUVVVSNFVPZHpKNUlVTnZBbXBTV21YUWJSYjkwQlE9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.6/Ultrasongs_0.3.6_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0NUbDdPRTJVdi8zZUNHU1pYMklGZ1J2L20wWSt2OTh6SnZKU2EvZi92YjNCQm5pUTkwWGVMTmYyUXV1UUYyU2l5VjJQaWthUEluakduK1BOaG1pQVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODQ1Mjg1CWZpbGU6VWx0cmFzb25nc18wLjMuN194NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjcKejZTRVFJVk5NeVFkdEdJbHFqSjA1c0l1eXdyNTRWTjFUb2lzdERUUnlsM0E4WUVaOWNFSEFTY2s3VTBuNCtJaVJzVDRWYUJCejFaY1NDWHo5MUZEQ1E9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.7/Ultrasongs_0.3.7_x64-setup.exe"
     }
   }
 }
