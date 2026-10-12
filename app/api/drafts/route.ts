@@ -83,10 +83,21 @@ export async function POST(request: NextRequest) {
       await copyInto(accompanimentSrc, accompanimentFilename);
     }
 
+    // Rewriting an existing draft keeps the Songs folder it is linked to (draftLink.ts)
+    let link: { songFolder?: string; syncedHash?: string } = {};
+    const existingJson = path.join(dir, "draft.json");
+    if (existsSync(existingJson)) {
+      try {
+        const prev = JSON.parse(await readFile(existingJson, "utf-8"));
+        if (prev.songFolder) link = { songFolder: prev.songFolder, syncedHash: prev.syncedHash };
+      } catch { /* unreadable: nothing to keep */ }
+    }
+
     const draft = {
       id, title, artist, lyrics: lyrics ?? "", savedAt: new Date().toISOString(),
       bpm, gap, notes, words, language, pauses: pauses ?? [],
       audioFilename, videoFilename, vocalsFilename, accompanimentFilename,
+      ...link,
     };
 
     await writeFile(path.join(dir, "draft.json"), JSON.stringify(draft));

@@ -475,6 +475,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mp3: uploadRef.current.mp3, editedNotes: notes, bpm, gap, title, artist,
+          draftId: currentDraftId ?? undefined,
           videoPath: uploadRef.current.videoPath,
           vocalsPath: uploadRef.current.vocalsPath,
           accompanimentPath: uploadRef.current.accompanimentPath,
@@ -493,7 +494,7 @@ export default function Home() {
       setError(err instanceof Error ? err.message : t("error.generateFailed"));
       setPhase("error");
     }
-  }, [title, artist, t]);
+  }, [title, artist, currentDraftId, t]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import { existsSync } from "fs";
 import { buildUltrastarTxt, type UltrastarMeta, type UltrastarNote } from "./ultrastar";
 import { isInside } from "./safePath";
 import { AppError } from "@/app/lib/appError";
+import { linkDraft } from "./draftLink";
 
 /** Dropped into every folder we create, so we never overwrite songs made elsewhere. */
 const MARKER = ".ultrasongs";
@@ -23,6 +24,8 @@ interface SaveSongInput {
   gap: number;
   mp3Path: string;
   videoPath?: string;
+  /** Draft this song comes from: it gets linked to the folder (see draftLink.ts). */
+  draftId?: string;
 }
 
 /**
@@ -30,7 +33,7 @@ interface SaveSongInput {
  * named after the song so Ultrastar lists it cleanly. Returns the folder path.
  */
 export async function saveSongFolder(input: SaveSongInput): Promise<string> {
-  const { songsDir, title, artist, notes, bpm, gap, mp3Path, videoPath } = input;
+  const { songsDir, title, artist, notes, bpm, gap, mp3Path, videoPath, draftId } = input;
   const base = `${safeName(artist)} - ${safeName(title)}`;
   const dir = path.join(songsDir, base);
   if (!isInside(songsDir, dir)) throw new AppError("api.songNameInvalid", undefined, 400);
@@ -45,8 +48,10 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
 
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, MARKER), "", "utf8");
-  await writeFile(path.join(dir, `${base}.txt`), buildUltrastarTxt(notes, meta), "utf8");
+  const txt = buildUltrastarTxt(notes, meta);
+  await writeFile(path.join(dir, `${base}.txt`), txt, "utf8");
   await copyFile(mp3Path, path.join(dir, mp3Name));
   if (videoPath && videoName) await copyFile(videoPath, path.join(dir, videoName));
+  if (draftId) await linkDraft(draftId, base, txt);
   return dir;
 }

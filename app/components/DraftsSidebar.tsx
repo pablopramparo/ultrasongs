@@ -19,6 +19,9 @@ interface LibrarySong {
   artist: string;
   hasVideo: boolean;
   ours: boolean;
+  /** Draft linked to this folder, and whether the .txt changed since (see lib/draftLink.ts). */
+  draftId?: string;
+  modified?: boolean;
 }
 
 interface Props {
@@ -104,8 +107,37 @@ export default function DraftsSidebar({
     };
   }, [refreshKey]);
 
-  // Opening a song from the Songs folder always makes a new draft (a copy): ask before doing that.
+  // A song with no linked draft becomes a new draft (a copy): ask before doing that.
   const [confirmImport, setConfirmImport] = useState<LibrarySong | null>(null);
+  // A linked song whose .txt changed outside the app: ask what to do with the changes.
+  const [confirmSync, setConfirmSync] = useState<LibrarySong | null>(null);
+
+  const handleLibraryClick = (song: LibrarySong) => {
+    if (!song.draftId) setConfirmImport(song);
+    else if (song.modified) setConfirmSync(song);
+    else onLoad(song.draftId);
+  };
+
+  /** Loads the .txt's notes into the linked draft, then opens it. */
+  const handleLibrarySync = async (song: LibrarySong) => {
+    setConfirmSync(null);
+    setLibraryBusy(song.folder);
+    setLibraryError(null);
+    try {
+      const res = await fetch("/api/library/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder: song.folder }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      onLibraryImport(data.id);
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : t("error.importFailed"));
+    } finally {
+      setLibraryBusy(null);
+    }
+  };
 
   const handleLibraryImport = async (song: LibrarySong) => {
     setConfirmImport(null);
@@ -321,7 +353,7 @@ export default function DraftsSidebar({
                 {library.map((song) => (
                   <button
                     key={song.folder}
-                    onClick={() => setConfirmImport(song)}
+                    onClick={() => handleLibraryClick(song)}
                     disabled={libraryBusy !== null}
                     title={t("sidebar.importAsDraft")}
                     className="flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-800 disabled:opacity-50"
@@ -472,6 +504,41 @@ export default function DraftsSidebar({
           className="btn btn-primary !px-4 !py-2 text-xs"
         >
           {t("sidebar.importConfirm")}
+        </button>
+      </div>
+    </Modal>
+
+    <Modal
+      open={confirmSync !== null}
+      title={t("sidebar.syncTitle")}
+      onClose={() => setConfirmSync(null)}
+    >
+      <p className="text-sm text-zinc-300">
+        {t("sidebar.syncBody", {
+          name: confirmSync ? `${confirmSync.artist ? confirmSync.artist + " - " : ""}${confirmSync.title}` : "",
+        })}
+      </p>
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" onClick={() => setConfirmSync(null)} className="btn btn-secondary !px-4 !py-2 text-xs">
+          {t("action.cancel")}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const id = confirmSync?.draftId;
+            setConfirmSync(null);
+            if (id) onLoad(id);
+          }}
+          className="btn btn-secondary !px-4 !py-2 text-xs"
+        >
+          {t("sidebar.syncKeep")}
+        </button>
+        <button
+          type="button"
+          onClick={() => confirmSync && handleLibrarySync(confirmSync)}
+          className="btn btn-primary !px-4 !py-2 text-xs"
+        >
+          {t("sidebar.syncLoad")}
         </button>
       </div>
     </Modal>

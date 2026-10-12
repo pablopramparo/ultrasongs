@@ -42,6 +42,7 @@ export async function POST(
       gap: d.gap,
       mp3Path,
       videoPath: videoPath && existsSync(videoPath) ? videoPath : undefined,
+      draftId: id,
     });
     return NextResponse.json({ dir: saved });
   } catch (err) {

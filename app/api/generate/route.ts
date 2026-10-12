@@ -23,6 +23,7 @@ interface GenerateAuto {
   lyrics: string;
   title: string;
   artist: string;
+  draftId?: string;
   pauses?: Pause[];
   videoPath?: string;
   vocalsPath?: string;
@@ -37,6 +38,7 @@ interface GenerateFromEditor {
   gap: number;
   title: string;
   artist: string;
+  draftId?: string;
   videoPath?: string;
   vocalsPath?: string;
   accompanimentPath?: string;
@@ -152,6 +154,7 @@ export async function POST(request: NextRequest) {
         const dir = await saveSongFolder({
           songsDir, title, artist, notes: ultraNotes, bpm, gap,
           mp3Path: mp3,
+          draftId: typeof body.draftId === "string" ? body.draftId : undefined,
           videoPath: videoPath && existsSync(videoPath) ? videoPath : undefined,
         });
         headers["X-Saved-To"] = encodeURIComponent(dir);

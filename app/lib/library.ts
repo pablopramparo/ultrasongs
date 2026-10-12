@@ -6,6 +6,7 @@ import { parseUltrastarTxt, type ParsedUltrastar } from "./ultrastar";
 import type { EditorNote } from "./editorNote";
 import { DRAFTS_DIR, isInside } from "./safePath";
 import { getSongsDir } from "./settings";
+import { hashSongText, readDraftLinks, releaseFolder } from "./draftLink";
 import { extractAudio } from "./ffmpeg";
 import { AppError } from "@/app/lib/appError";
 
@@ -20,6 +21,10 @@ export interface LibrarySong {
   hasVideo: boolean;
   /** Created by this app (carries the marker file). */
   ours: boolean;
+  /** Draft linked to this folder (exported from it, or imported from this folder). */
+  draftId?: string;
+  /** The .txt changed outside the app since the draft was last exported/imported. */
+  modified?: boolean;
 }
 
 /**
@@ -115,6 +120,7 @@ export async function listLibrary(): Promise<LibrarySong[]> {
   if (!songsDir || !existsSync(songsDir)) return [];
   const entries = await readdir(songsDir, { withFileTypes: true });
   const songs: LibrarySong[] = [];
+  const links = await readDraftLinks();
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -122,13 +128,16 @@ export async function listLibrary(): Promise<LibrarySong[]> {
     try {
       const txtPath = await findTxt(dir);
       if (!txtPath) continue;
-      const parsed = parseUltrastarTxt(await readFile(txtPath, "utf8"));
+      const text = await readFile(txtPath, "utf8");
+      const parsed = parseUltrastarTxt(text);
+      const link = links.get(entry.name);
       songs.push({
         folder: entry.name,
         title: parsed.title || entry.name,
         artist: parsed.artist,
         hasVideo: !!parsed.videoFilename,
         ours: existsSync(path.join(dir, MARKER)),
+        ...(link ? { draftId: link.id, modified: link.syncedHash !== hashSongText(text) } : {}),
       });
     } catch {
       // unreadable folder: skip
@@ -150,7 +159,8 @@ export async function importFromLibrary(folder: string): Promise<string> {
 
   const txtPath = await findTxt(dir);
   if (!txtPath) throw new AppError("api.folderNoTxt", undefined, 400);
-  const parsed = parseUltrastarTxt(await readFile(txtPath, "utf8"));
+  const txt = await readFile(txtPath, "utf8");
+  const parsed = parseUltrastarTxt(txt);
 
   const files = await readdir(dir);
   const mp3Src = resolveInFolder(dir, parsed.mp3Filename, files, AUDIO_EXTS);
@@ -184,7 +194,47 @@ export async function importFromLibrary(folder: string): Promise<string> {
     pauses: [],
     audioFilename: "audio.mp3",
     videoFilename,
+    // Reopening this song from the library goes back to this draft instead of making another one
+    songFolder: folder,
+    syncedHash: hashSongText(txt),
   };
   await writeFile(path.join(draftPath, "draft.json"), JSON.stringify(draft));
+  await releaseFolder(folder, id);
   return id;
+}
+
+/**
+ * The folder's .txt was changed outside the app: load its notes, BPM and GAP into the draft linked
+ * to that folder, keeping everything else the draft has (lyrics, words, vocals). Returns the draft id.
+ */
+export async function syncDraftFromFolder(folder: string): Promise<string> {
+  const songsDir = getSongsDir();
+  if (!songsDir) throw new AppError("api.pickSongsFirst", undefined, 400);
+  if (!folder || folder !== path.basename(folder)) throw new AppError("api.folderInvalid", undefined, 400);
+  const dir = path.join(songsDir, folder);
+  if (!isInside(songsDir, dir) || !existsSync(dir)) throw new AppError("api.folderNotFound", undefined, 404);
+
+  const txtPath = await findTxt(dir);
+  if (!txtPath) throw new AppError("api.folderNoTxt", undefined, 400);
+  const txt = await readFile(txtPath, "utf8");
+  const parsed = parseUltrastarTxt(txt);
+
+  const link = (await readDraftLinks()).get(folder);
+  const draftDir = link ? path.join(DRAFTS_DIR, link.id) : null;
+  const jsonPath = draftDir ? path.join(draftDir, "draft.json") : null;
+  if (!link || !jsonPath || !existsSync(jsonPath)) throw new AppError("api.draftNotFound", undefined, 404);
+
+  const draft = JSON.parse(await readFile(jsonPath, "utf-8"));
+  await writeFile(
+    jsonPath,
+    JSON.stringify({
+      ...draft,
+      notes: ultrastarToEditorNotes(parsed),
+      bpm: parsed.bpm,
+      gap: parsed.gap,
+      syncedHash: hashSongText(txt),
+      savedAt: new Date().toISOString(),
+    })
+  );
+  return link.id;
 }
