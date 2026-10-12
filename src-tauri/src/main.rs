@@ -10,7 +10,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, RunEvent, Url};
+use tauri::{AppHandle, Manager, RunEvent, Url};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri_plugin_updater::UpdaterExt;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const BOOT_TIMEOUT: Duration = Duration::from_secs(90);
@@ -126,9 +128,49 @@ fn start_server(resources: &Path, data: &Path, port: u16) -> std::io::Result<Chi
     Ok(child)
 }
 
+/// Looks for a newer release (manifest: `latest.json` in the repository) and, if the user agrees,
+/// downloads it, stops the server and runs the installer. Any failure is silent: being offline or
+/// GitHub being down must never get in the way of using the app.
+async fn update_if_available(app: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(update) = app.updater()?.check().await? else {
+        return Ok(());
+    };
+    let message = format!(
+        "Hay una versión nueva de Ultrasongs ({new}). Tenés la {old}.
+         Tus borradores y modelos no se tocan. ¿Instalarla ahora?
+
+         A new version of Ultrasongs is available ({new}; you have {old}).
+         Your drafts and models are kept. Install it now?",
+        new = update.version,
+        old = update.current_version,
+    );
+    let accepted = app
+        .dialog()
+        .message(message)
+        .title("Ultrasongs")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Instalar / Install".into(),
+            "Más tarde / Later".into(),
+        ))
+        .blocking_show();
+    if !accepted {
+        return Ok(());
+    }
+    let bytes = update.download(|_, _| {}, || {}).await?;
+    // The installer replaces files the server (and the Python service) may be holding open.
+    if let Some(server) = app.try_state::<Server>() {
+        if let Some(child) = server.0.lock().unwrap().as_mut() {
+            kill_tree(child);
+        }
+    }
+    update.install(bytes)?;
+    app.restart();
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let resources = plain(app.path().resource_dir()?);
             // Not the install folder (%LOCALAPPDATA%\Ultrasongs): uninstalling must not wipe models and drafts.
@@ -138,6 +180,13 @@ fn main() {
             let port = free_port();
             let child = start_server(&resources, &data, port)?;
             app.manage(Server(Mutex::new(Some(child))));
+
+            // Checked a little after startup, so it never competes with the server booting.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_secs(10));
+                let _ = tauri::async_runtime::block_on(update_if_available(handle));
+            });
 
             let window = app.get_webview_window("main");
             std::thread::spawn(move || {
