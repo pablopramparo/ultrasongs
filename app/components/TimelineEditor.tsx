@@ -6,6 +6,7 @@ import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
 import EditorHelp from "./EditorHelp";
+import DownloadButton from "./DownloadButton";
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const KEYS_W = 68;
@@ -1812,13 +1813,12 @@ export default function TimelineEditor({
                   </span>
                 )}
                 {exportStatus.url && (
-                  <a
-                    href={exportStatus.url}
-                    download={exportStatus.filename}
-                    className="btn btn-secondary !h-8 w-fit !px-3 !py-0 text-xs"
-                  >
-                    {t("download.button", { filename: exportStatus.filename })}
-                  </a>
+                  <DownloadButton
+                    url={exportStatus.url}
+                    filename={exportStatus.filename}
+                    label={t("download.button", { filename: exportStatus.filename })}
+                    className="btn btn-secondary inline-flex !h-8 w-fit items-center !px-3 !py-0 text-xs"
+                  />
                 )}
               </>
             )}

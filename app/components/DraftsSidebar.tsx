@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import { useI18n } from "@/app/i18n/I18nProvider";
+import Modal from "./Modal";
 
 interface DraftMeta {
   id: string;
@@ -103,7 +104,11 @@ export default function DraftsSidebar({
     };
   }, [refreshKey]);
 
+  // Opening a song from the Songs folder always makes a new draft (a copy): ask before doing that.
+  const [confirmImport, setConfirmImport] = useState<LibrarySong | null>(null);
+
   const handleLibraryImport = async (song: LibrarySong) => {
+    setConfirmImport(null);
     setLibraryBusy(song.folder);
     setLibraryError(null);
     try {
@@ -122,8 +127,11 @@ export default function DraftsSidebar({
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  // Deleting a draft removes its audio, video and processing results for good: ask first.
+  const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setConfirmDelete(null);
     setDeleting(id);
     try {
       await fetch(`/api/drafts/${id}`, { method: "DELETE" });
@@ -207,6 +215,7 @@ export default function DraftsSidebar({
     "mt-1 block w-full text-xs text-zinc-400 file:mr-2 file:rounded-md file:border-0 file:bg-zinc-800 file:px-2 file:py-1 file:text-xs file:font-medium file:text-zinc-200 hover:file:bg-zinc-700";
 
   return (
+    <>
     <aside className="fixed left-0 top-0 z-30 flex h-screen w-64 flex-col border-r border-zinc-800 bg-zinc-900">
       {/* Logo → home */}
       <button
@@ -264,7 +273,7 @@ export default function DraftsSidebar({
 
             {/* Delete button */}
             <button
-              onClick={(e) => handleDelete(e, d.id)}
+              onClick={(e) => { e.stopPropagation(); setConfirmDelete(d); }}
               disabled={deleting === d.id}
               title={t("sidebar.deleteDraft")}
               className="absolute right-2 top-2.5 hidden rounded-md p-1 text-zinc-500 hover:bg-red-950 hover:text-red-400 group-hover:flex"
@@ -312,7 +321,7 @@ export default function DraftsSidebar({
                 {library.map((song) => (
                   <button
                     key={song.folder}
-                    onClick={() => handleLibraryImport(song)}
+                    onClick={() => setConfirmImport(song)}
                     disabled={libraryBusy !== null}
                     title={t("sidebar.importAsDraft")}
                     className="flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-800 disabled:opacity-50"
@@ -420,5 +429,52 @@ export default function DraftsSidebar({
         </div>
       </div>
     </aside>
+
+    <Modal
+      open={confirmDelete !== null}
+      title={t("sidebar.deleteConfirmTitle")}
+      onClose={() => setConfirmDelete(null)}
+    >
+      <p className="text-sm text-zinc-300">
+        {t("sidebar.deleteConfirmBody", { title: confirmDelete?.title || t("sidebar.untitled") })}
+      </p>
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={() => setConfirmDelete(null)} className="btn btn-secondary !px-4 !py-2 text-xs">
+          {t("action.cancel")}
+        </button>
+        <button
+          type="button"
+          onClick={() => confirmDelete && handleDelete(confirmDelete.id)}
+          className="btn !border-red-900 !bg-red-700 !px-4 !py-2 text-xs !text-white hover:!bg-red-600"
+        >
+          {t("sidebar.deleteConfirm")}
+        </button>
+      </div>
+    </Modal>
+
+    <Modal
+      open={confirmImport !== null}
+      title={t("sidebar.importConfirmTitle")}
+      onClose={() => setConfirmImport(null)}
+    >
+      <p className="text-sm text-zinc-300">
+        {t("sidebar.importConfirmBody", {
+          name: confirmImport ? `${confirmImport.artist ? confirmImport.artist + " - " : ""}${confirmImport.title}` : "",
+        })}
+      </p>
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={() => setConfirmImport(null)} className="btn btn-secondary !px-4 !py-2 text-xs">
+          {t("action.cancel")}
+        </button>
+        <button
+          type="button"
+          onClick={() => confirmImport && handleLibraryImport(confirmImport)}
+          className="btn btn-primary !px-4 !py-2 text-xs"
+        >
+          {t("sidebar.importConfirm")}
+        </button>
+      </div>
+    </Modal>
+    </>
   );
 }

@@ -179,6 +179,57 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     }
 }
 
+/// Decodes the `%XX` escapes of a URI component (the file name travels in a header).
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Download button: the webview does not save blob downloads, so the page sends the bytes here
+/// (raw body, file name in the `x-filename` header), the user picks where, and the file is written.
+/// Returns the saved path, or null if the dialog was cancelled.
+#[tauri::command]
+async fn save_download(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw bytes".into());
+    };
+    let name = request
+        .headers()
+        .get("x-filename")
+        .and_then(|v| v.to_str().ok())
+        .map(percent_decode)
+        .unwrap_or_else(|| "song.zip".into());
+    // Never trust a path from the page: only the file name is used as a suggestion.
+    let name = Path::new(&name)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "song.zip".into());
+
+    let picked = app
+        .dialog()
+        .file()
+        .set_file_name(&name)
+        .add_filter("ZIP", &["zip"])
+        .blocking_save_file();
+    let Some(path) = picked else { return Ok(None) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// Opens a link in the default browser. Only a short list of hosts the credits point at is allowed,
 /// since the webview shows a local web app and must not be able to launch arbitrary URLs.
 #[tauri::command]
@@ -235,7 +286,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_update, install_update, open_external])
+        .invoke_handler(tauri::generate_handler![check_update, install_update, open_external, save_download])
         .setup(|app| {
             let resources = plain(app.path().resource_dir()?);
             // Not the install folder (%LOCALAPPDATA%\Ultrasongs): uninstalling must not wipe models and drafts.

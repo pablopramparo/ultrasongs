@@ -11,6 +11,7 @@
     "dialog:default",
     "allow-check-update",
     "allow-install-update",
-    "allow-open-external"
+    "allow-open-external",
+    "allow-save-download"
   ]
 }
