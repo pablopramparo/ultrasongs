@@ -17,6 +17,11 @@ export interface EditorNote {
    * had phrase information: see hasLineMarks / inferLineStarts.
    */
   lineStart?: boolean;
+  /**
+   * Last note of a phrase that is followed by an instrumental part: the line break is exported
+   * right after this note ends, instead of a few beats before the next phrase starts.
+   */
+  breakAfter?: boolean;
 }
 
 /** Silence between two notes (seconds) from which a new phrase is assumed to start. */

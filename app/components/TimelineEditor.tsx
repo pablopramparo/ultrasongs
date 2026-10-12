@@ -1006,6 +1006,31 @@ export default function TimelineEditor({
     });
   }, [selectedId, snapshot]);
 
+  // ── Phrase end before an instrumental part ───────────────────────────────
+  // Marks the selected notes as the last of their phrase (the break is exported right after them)
+  // and makes the next note open a new phrase.
+  const toggleBreakAfter = useCallback(() => {
+    const ids = new Set(selectionRef.current);
+    const primary = mixNotesRef.current.find((n) => n.id === selectionRef.current[selectionRef.current.length - 1]);
+    if (!primary) return;
+    const on = !primary.breakAfter;
+    snapshot();
+    setNotes((prev) => {
+      const order = [...prev].sort((a, b) => a.startSec - b.startSec);
+      const opens = new Set<string>();
+      if (on) {
+        order.forEach((n, i) => {
+          if (ids.has(n.id) && order[i + 1]) opens.add(order[i + 1].id);
+        });
+      }
+      return prev.map((n) => {
+        if (ids.has(n.id)) return { ...n, breakAfter: on };
+        if (opens.has(n.id)) return { ...n, lineStart: true };
+        return n;
+      });
+    });
+  }, [snapshot]);
+
   // ── Copy / paste ──────────────────────────────────────────────────────────
   // Copies keep their pitch and their spacing; pasting drops the first one at the playhead.
   const copySelection = useCallback(() => {
@@ -1079,6 +1104,11 @@ export default function TimelineEditor({
         snapshot();
         setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: !n.lineStart } : n)));
       }
+      // B: phrase ends after this note (an instrumental part follows)
+      if (e.code === "KeyB" && !mod && selection.length > 0) {
+        e.preventDefault();
+        toggleBreakAfter();
+      }
       // G: golden on/off (rap notes keep their rap kind); F: freestyle on/off
       if ((e.code === "KeyG" || e.code === "KeyF") && !mod && selection.length > 0) {
         e.preventDefault();
@@ -1103,7 +1133,7 @@ export default function TimelineEditor({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, snapshot, undo, redo]);
+  }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, toggleBreakAfter, snapshot, undo, redo]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const playheadX = KEYS_W + playheadSec * pxPerSec;
@@ -1510,6 +1540,20 @@ export default function TimelineEditor({
             ) : null
           )}
 
+          {/* Phrase ends before an instrumental part: a dashed line right after the note */}
+          {notes.map((n) =>
+            n.breakAfter ? (
+              <div
+                key={`break-${n.id}`}
+                title={t("editor.endPhraseTitle")}
+                style={{
+                  position: "absolute", left: KEYS_W + (n.startSec + n.durationSec) * pxPerSec + 2, top: 0, height: rollH,
+                  borderLeft: "1px dashed rgba(245,158,11,0.8)", zIndex: 5, pointerEvents: "none",
+                }}
+              />
+            ) : null
+          )}
+
           {/* Notes */}
           {notes.map((note) => {
             const x = KEYS_W + note.startSec * pxPerSec;
@@ -1629,6 +1673,14 @@ export default function TimelineEditor({
                 className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
               >
                 ¶ {t("editor.newPhrase")}
+              </button>
+              <button
+                onClick={toggleBreakAfter}
+                title={t("editor.endPhraseTitle")}
+                aria-pressed={!!selectedNote.breakAfter}
+                className={`${chip} ${selectedNote.breakAfter ? "!border-amber-600 !bg-amber-950 !text-amber-200" : ""}`}
+              >
+                ⏎ {t("editor.endPhrase")}
               </button>
               <select
                 value={selectedNote.type}

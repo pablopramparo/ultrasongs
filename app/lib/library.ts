@@ -47,12 +47,21 @@ export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
   const hasBreaks = parsed.notes.some((n) => n.type === "-");
   const out: EditorNote[] = [];
   let opensPhrase = false;
+  let lastEndBeat = 0;
+  let breakBeat = 0;
 
   for (const n of parsed.notes) {
     if (n.type === "-") {
       opensPhrase = out.length > 0;
+      breakBeat = n.startBeat;
       continue;
     }
+    // A break right after the previous note, with room before this one, is an explicit phrase end
+    // (instrumental part): keep it, otherwise it would move to 4 beats before this note on export.
+    if (opensPhrase && out.length > 0 && breakBeat - lastEndBeat <= 2 && n.startBeat - breakBeat > 4) {
+      out[out.length - 1].breakAfter = true;
+    }
+    lastEndBeat = n.startBeat + n.duration;
     out.push({
       id: crypto.randomUUID(),
       syllable: n.syllable,
