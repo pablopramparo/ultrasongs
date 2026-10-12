@@ -5,6 +5,7 @@ import { hasLineMarks, inferLineStarts, type EditorNote, type NoteType } from "@
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
+import EditorHelp from "./EditorHelp";
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const KEYS_W = 68;
@@ -169,11 +170,20 @@ interface Props {
   artist: string;
   draftId?: string;
   onExport: (notes: EditorNote[], bpm: number, gap: number) => void;
+  /** Progress and result of the last export, shown inside the editor (the page behind it is hidden). */
+  exportStatus?: {
+    busy: boolean;
+    url: string | null;
+    filename: string;
+    savedTo?: string | null;
+    saveError?: string | null;
+    error?: string | null;
+  };
   onClose?: () => void;
 }
 
 export default function TimelineEditor({
-  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, onClose,
+  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, exportStatus, onClose,
 }: Props) {
   const { t } = useI18n();
   // Show the phrases the export will use, also for songs that never had them recorded
@@ -262,6 +272,11 @@ export default function TimelineEditor({
     setFollowPlayhead(on);
     try { localStorage.setItem("ultrasongs.editor.follow", on ? "1" : "0"); } catch { /* ignore */ }
   };
+  const [helpOpen, setHelpOpen] = useState(false);
+  // The export result card stays until dismissed; a new export reopens it.
+  const [exportNoticeOpen, setExportNoticeOpen] = useState(false);
+  const helpOpenRef = useRef(false);
+  useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
   const [selection, setSelection] = useState<string[]>([]);
   const selectionRef = useRef<string[]>([]);
   useEffect(() => { selectionRef.current = selection; }, [selection]);
@@ -1096,6 +1111,7 @@ export default function TimelineEditor({
     const onKey = (e: KeyboardEvent) => {
       // Only text entry keeps its keys. Sliders, buttons and selects that still have focus after a
       // click must not swallow Space (play/pause) or the editing shortcuts.
+      if (helpOpenRef.current) return; // the help dialog owns the keyboard (Esc closes it)
       const el = e.target as HTMLElement;
       const typing =
         el.isContentEditable ||
@@ -1414,6 +1430,14 @@ export default function TimelineEditor({
 
         {/* File and view */}
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setHelpOpen(true)}
+            title={t("editor.helpButton")}
+            aria-label={t("editor.helpButton")}
+            className={`${squareBtn} bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100`}
+          >
+            ?
+          </button>
           {videoUrl && (
             <button
               onClick={toggleVideo}
@@ -1443,8 +1467,12 @@ export default function TimelineEditor({
               {saveStatus === "saving" ? t("editor.saving") : saveStatus === "saved" ? t("editor.saved") : saveStatus === "error" ? t("editor.error") : t("editor.save")}
             </button>
           )}
-          <button onClick={() => onExport(notes, bpm, gap)} className="btn btn-primary !h-8 !px-3 !py-0 text-xs">
-            {t("editor.export")}
+          <button
+            onClick={() => { setExportNoticeOpen(true); onExport(notes, bpm, gap); }}
+            disabled={exportStatus?.busy}
+            className="btn btn-primary !h-8 !px-3 !py-0 text-xs"
+          >
+            {exportStatus?.busy ? t("editor.exporting") : t("editor.export")}
           </button>
           {onClose && (
             <button
@@ -1758,6 +1786,58 @@ export default function TimelineEditor({
         </fieldset>
         <span className="ml-4 hidden min-w-0 truncate 2xl:block">{t("editor.help")}</span>
       </div>
+
+      {/* Export result: the page that normally shows it is hidden behind the editor */}
+      {exportNoticeOpen && exportStatus && (exportStatus.busy || exportStatus.url || exportStatus.error) && (
+        <div
+          role="status"
+          className="absolute bottom-16 left-1/2 z-[60] flex w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 items-start gap-3 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm shadow-2xl shadow-black/60"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {exportStatus.busy ? (
+              <span className="text-zinc-200">{t("editor.exporting")}…</span>
+            ) : exportStatus.error ? (
+              <span className="text-red-400">{exportStatus.error}</span>
+            ) : (
+              <>
+                <span className="font-medium text-green-400">{t("editor.exportReady")}</span>
+                {exportStatus.savedTo && (
+                  <span className="text-xs text-zinc-300">
+                    {t("download.savedTo")} <span className="break-all font-mono">{exportStatus.savedTo}</span>
+                  </span>
+                )}
+                {exportStatus.saveError && (
+                  <span className="text-xs text-amber-400">
+                    {t("download.saveError")} {exportStatus.saveError}
+                  </span>
+                )}
+                {exportStatus.url && (
+                  <a
+                    href={exportStatus.url}
+                    download={exportStatus.filename}
+                    className="btn btn-secondary !h-8 w-fit !px-3 !py-0 text-xs"
+                  >
+                    {t("download.button", { filename: exportStatus.filename })}
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+          {!exportStatus.busy && (
+            <button
+              onClick={() => setExportNoticeOpen(false)}
+              aria-label={t("action.close")}
+              className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
+      <EditorHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <audio
         ref={audioRef}

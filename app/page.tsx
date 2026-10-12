@@ -520,6 +520,14 @@ export default function Home() {
           artist={artist}
           draftId={currentDraftId ?? undefined}
           onExport={handleEditorExport}
+          exportStatus={{
+            busy: phase === "generating",
+            url: downloadUrl,
+            filename: `${title || "song"}.zip`,
+            savedTo,
+            saveError,
+            error: phase === "error" ? error : null,
+          }}
           onClose={() => setEditorOpen(false)}
         />
       </div>
