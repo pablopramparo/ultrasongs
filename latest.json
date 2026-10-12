@@ -1,11 +1,11 @@
 {
-  "version": "0.3.2",
-  "notes": "Editor: phrase end before instrumental parts, draggable video thumbnail.",
-  "pub_date": "2026-10-12T20:24:17.041Z",
+  "version": "0.3.3",
+  "notes": "Settings: version, check for updates, credits.",
+  "pub_date": "2026-10-12T20:38:17.728Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ00xUXZLcWlrWnhiL1dHTWFIbFJ3ZjdnZXZabUFTeU9nb1NRSjdnMUhrTFE1TGJ6N1NjMVc3eC95VC9yVnhPRTRNaFVvMFd6cDdqeU5KdDB6NWVRemcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODM2NjU2CWZpbGU6VWx0cmFzb25nc18wLjMuMl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjIKMnlyWUFBaGVrb3VxcVhweWc4QmJkUFhJMlIxYzlKNi9mbFBEQWlaVkEybmcrMHlxWlFEWGNnNHdpaml3WTRNb3RmRnQwSmNOZGpFbnJNRTZ6Y0FPQUE9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.2/Ultrasongs_0.3.2_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0JlM2VEeGJWUGY3OTNoRTkvdHoxSkZCMi8wNDVGSGhoU0FmOU1yOGVkM1pWQTlPTzdwZXRVd3h2enhKL0hTMVcySHExUm5idUVaZzlpZGRXeC9SeGdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODM3NDk3CWZpbGU6VWx0cmFzb25nc18wLjMuM194NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjMKQm8xUERPTGxlVy9OYWdKdkoraGVmTmJlMVE4bjNTVHFyelFLdmFQK2IvKzk1MFFwOEdBVjl1bGpYNERXUXVHOVNtbzZlcTlaNDhmaTJtUkJsdkhpRHc9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.3/Ultrasongs_0.3.3_x64-setup.exe"
     }
   }
 }
