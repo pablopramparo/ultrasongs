@@ -1013,8 +1013,14 @@ export default function TimelineEditor({
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return; // don't steal input events
+      // Only text entry keeps its keys. Sliders, buttons and selects that still have focus after a
+      // click must not swallow Space (play/pause) or the editing shortcuts.
+      const el = e.target as HTMLElement;
+      const typing =
+        el.isContentEditable ||
+        el.tagName === "TEXTAREA" ||
+        (el.tagName === "INPUT" && !["range", "checkbox", "radio", "button"].includes((el as HTMLInputElement).type));
+      if (typing) return;
       const mod = e.ctrlKey || e.metaKey;
       const ids = new Set(selection);
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
@@ -1071,8 +1077,16 @@ export default function TimelineEditor({
         );
       }
     };
+    // A focused button would also "click" on Space release, toggling it on top of play/pause
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space" && (e.target as HTMLElement).tagName === "BUTTON") e.preventDefault();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, snapshot, undo, redo]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
