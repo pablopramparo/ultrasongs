@@ -8,7 +8,17 @@ import RangeSlider from "./RangeSlider";
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 const KEYS_W = 68;
-const PX_PITCH = 18;
+/** Row height (vertical zoom) bounds, in px per semitone. */
+const PX_PITCH_DEFAULT = 18;
+const PX_PITCH_MIN = 10;
+const PX_PITCH_MAX = 40;
+/** Horizontal zoom bounds, in px per second. */
+const PX_SEC_DEFAULT = 120;
+const PX_SEC_MIN = 40;
+const PX_SEC_MAX = 400;
+/** Pointer travel (px) before a press on the grid becomes a rubber-band selection. */
+const DRAG_THRESHOLD = 4;
+const HISTORY_LIMIT = 100;
 /** Hard limits of the pitch axis (MIDI). */
 const PITCH_MIN = 0;
 const PITCH_MAX = 127;
@@ -77,6 +87,69 @@ function withoutNote(list: EditorNote[], id: string): EditorNote[] {
   return rest;
 }
 
+/**
+ * Plays notes as synth tones against a song clock, scheduling only the next fraction of a second.
+ * Unlike scheduling the whole song up front, it follows seeks (call `reset`) and edits made while
+ * playing, so what is heard is always what the roll shows at the playhead.
+ */
+function createToneScheduler(
+  ctx: AudioContext,
+  dest: AudioNode,
+  getSongTime: () => number,
+  getNotes: () => EditorNote[]
+) {
+  const LOOKAHEAD = 0.3;
+  const scheduled = new Set<string>();
+  let active: OscillatorNode[] = [];
+  let lastT = getSongTime();
+
+  const reset = () => {
+    for (const osc of active) {
+      try { osc.stop(); } catch { /* already stopped */ }
+    }
+    active = [];
+    scheduled.clear();
+  };
+
+  const tick = () => {
+    const t = getSongTime();
+    if (Math.abs(t - lastT) > 0.5) reset(); // the clock jumped: a seek
+    lastT = t;
+    for (const n of getNotes()) {
+      if (scheduled.has(n.id)) continue;
+      if (n.startSec + n.durationSec <= t || n.startSec > t + LOOKAHEAD) continue;
+      scheduled.add(n.id);
+      const delay = n.startSec - t;
+      // A note already under way is clipped to its remaining part.
+      const remaining = delay < 0 ? n.durationSec + delay : n.durationSec;
+      if (remaining <= 0.02) continue;
+      const at = ctx.currentTime + Math.max(0, delay);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+      osc.connect(gain);
+      gain.connect(dest);
+      const release = Math.min(0.08, remaining * 0.15);
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.25, at + 0.02);
+      gain.gain.setValueAtTime(0.25, at + remaining - release);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + remaining);
+      osc.start(at);
+      osc.stop(at + remaining + 0.05);
+      osc.onended = () => { active = active.filter((o) => o !== osc); };
+      active.push(osc);
+    }
+  };
+
+  const timer = setInterval(tick, 40);
+  tick();
+  return {
+    reset,
+    stop: () => { clearInterval(timer); reset(); },
+  };
+}
+
 function fmtClock(sec: number, decimals = false) {
   const s = Math.max(0, sec);
   const m = Math.floor(s / 60);
@@ -108,6 +181,9 @@ export default function TimelineEditor({
   // Visible pitch range. Fitted once when the editor opens and only ever grows afterwards (one octave
   // when a note reaches an edge), so editing never makes the grid jump.
   const [range, setRange] = useState(() => fitRange(initialNotes));
+  const [pxPitch, setPxPitch] = useState(PX_PITCH_DEFAULT);
+  const pxPitchRef = useRef(pxPitch);
+  useEffect(() => { pxPitchRef.current = pxPitch; }, [pxPitch]);
   const rangeRef = useRef(range);
   const prevHiRef = useRef(range.hi);
   useEffect(() => { rangeRef.current = range; }, [range]);
@@ -122,11 +198,11 @@ export default function TimelineEditor({
   // Rows are laid out from the top: when rows are added above, keep what the user is looking at in place.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && range.hi !== prevHiRef.current) el.scrollBy({ top: (range.hi - prevHiRef.current) * PX_PITCH });
+    if (el && range.hi !== prevHiRef.current) el.scrollBy({ top: (range.hi - prevHiRef.current) * pxPitchRef.current });
     prevHiRef.current = range.hi;
   }, [range.hi]);
-  const rollH = (range.hi - range.lo + 1) * PX_PITCH;
-  const pitchToY = (p: number) => (range.hi - p) * PX_PITCH;
+  const rollH = (range.hi - range.lo + 1) * pxPitch;
+  const pitchToY = (p: number) => (range.hi - p) * pxPitch;
 
   // The floating video thumbnail can be hidden; the choice lasts for the session.
   const [showVideo, setShowVideo] = useState(() => {
@@ -138,8 +214,41 @@ export default function TimelineEditor({
       try { sessionStorage.setItem("ultrasongs.editor.video", next ? "1" : "0"); } catch { /* ignore */ }
       return next;
     });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pxPerSec, setPxPerSec] = useState(120);
+  // Selected notes; the last one is the "primary" the toolbar edits.
+  const [selection, setSelection] = useState<string[]>([]);
+  const selectionRef = useRef<string[]>([]);
+  useEffect(() => { selectionRef.current = selection; }, [selection]);
+  const selectedId = selection.length > 0 ? selection[selection.length - 1] : null;
+  const selectedSet = new Set(selection);
+  const clipboardRef = useRef<EditorNote[]>([]);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  // Undo/redo: snapshots of the notes taken just before each edit (a whole drag counts as one).
+  const notesRef = useRef(notes);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
+  const undoRef = useRef<EditorNote[][]>([]);
+  const redoRef = useRef<EditorNote[][]>([]);
+  const snapshot = useCallback(() => {
+    undoRef.current.push(notesRef.current);
+    if (undoRef.current.length > HISTORY_LIMIT) undoRef.current.shift();
+    redoRef.current = [];
+  }, []);
+  const undo = useCallback(() => {
+    const prev = undoRef.current.pop();
+    if (!prev) return;
+    redoRef.current.push(notesRef.current);
+    setNotes(prev);
+    setSelection((sel) => sel.filter((id) => prev.some((n) => n.id === id)));
+  }, []);
+  const redo = useCallback(() => {
+    const next = redoRef.current.pop();
+    if (!next) return;
+    undoRef.current.push(notesRef.current);
+    setNotes(next);
+    setSelection((sel) => sel.filter((id) => next.some((n) => n.id === id)));
+  }, []);
+  const syllableEditedRef = useRef(false);
+  const [pxPerSec, setPxPerSec] = useState(PX_SEC_DEFAULT);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playheadSec, setPlayheadSec] = useState(0);
   const [isNotePlaying, setIsNotePlaying] = useState(false);
@@ -147,6 +256,9 @@ export default function TimelineEditor({
   // Mixer: music is the audio element's volume; notes are synth tones (0 = off).
   const [musicVol, setMusicVol] = useState(1);
   const [noteVol, setNoteVol] = useState(0);
+  // Muting keeps the slider where it was, so un-muting brings the previous level back.
+  const [musicMuted, setMusicMuted] = useState(false);
+  const [notesMuted, setNotesMuted] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isMicTracePlaying, setIsMicTracePlaying] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
@@ -174,10 +286,26 @@ export default function TimelineEditor({
     }
     const top = fitRange(initialNotes).hi;
     el.scrollTo({
-      top: Math.max(0, (top - (lo + hi) / 2) * PX_PITCH + RULER_H - el.clientHeight / 2),
+      top: Math.max(0, (top - (lo + hi) / 2) * pxPitch + RULER_H - el.clientHeight / 2),
       left: Math.max(0, initialNotes[0].startSec * pxPerSec - 120),
     });
-  }, [initialNotes, pxPerSec]);
+  }, [initialNotes, pxPerSec, pxPitch]);
+  // Zooming keeps the centre of the view where it was, instead of drifting towards the origin.
+  const prevZoomRef = useRef({ pps: pxPerSec, pitch: pxPitch });
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prev = prevZoomRef.current;
+    prevZoomRef.current = { pps: pxPerSec, pitch: pxPitch };
+    if (!el) return;
+    if (prev.pps !== pxPerSec) {
+      const half = (el.clientWidth - KEYS_W) / 2;
+      el.scrollTo({ left: ((el.scrollLeft + half) / prev.pps) * pxPerSec - half });
+    }
+    if (prev.pitch !== pxPitch) {
+      const half = (el.clientHeight - RULER_H) / 2;
+      el.scrollTo({ top: ((el.scrollTop + half) / prev.pitch) * pxPitch - half });
+    }
+  }, [pxPerSec, pxPitch]);
   const rafRef = useRef(0);
   const micRafRef = useRef(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -187,6 +315,8 @@ export default function TimelineEditor({
   const notePlayCtxRef = useRef<AudioContext | null>(null);
   const notePlayStartRef = useRef<number>(0);
   const notePlayOffsetRef = useRef<number>(0);
+  // Whichever tone scheduler is running (song + notes, or notes only); seeks reset it.
+  const toneSchedulerRef = useRef<ReturnType<typeof createToneScheduler> | null>(null);
   const micTracePlayCtxRef = useRef<AudioContext | null>(null);
   const micTracePlayStartRef = useRef<number>(0);
   const micTracePlayOffsetRef = useRef<number>(0);
@@ -241,6 +371,8 @@ export default function TimelineEditor({
   }, [draftId, notes, bpm, gap]);
 
   const stopNotePlay = useCallback(() => {
+    toneSchedulerRef.current?.stop();
+    toneSchedulerRef.current = null;
     notePlayCtxRef.current?.close();
     notePlayCtxRef.current = null;
     cancelAnimationFrame(rafRef.current);
@@ -363,20 +495,20 @@ export default function TimelineEditor({
   }, [isPlaying, isNotePlaying, stopNotePlay]);
 
   // ── Song + notes together ─────────────────────────────────────────────────
-  // While the song plays with "Notas" on, schedule synth tones on a separate AudioContext,
-  // aligned to the audio element's current time. Re-runs only on play/pause/checkbox, so
-  // note edits made mid-playback take effect the next time playback starts.
+  // While the song plays with "Notas" on, synth tones are scheduled on a separate AudioContext
+  // against the audio element's clock, a few hundred ms ahead. Seeks reset the scheduler and edits
+  // made mid-playback are picked up as playback reaches them.
   const mixNotesRef = useRef<EditorNote[]>(notes);
   useEffect(() => { mixNotesRef.current = notes; }, [notes]);
   const noteMasterRef = useRef<GainNode | null>(null);
   const noteVolRef = useRef(noteVol);
   useEffect(() => {
-    noteVolRef.current = noteVol;
-    if (noteMasterRef.current) noteMasterRef.current.gain.value = noteVol;
-  }, [noteVol]);
+    noteVolRef.current = notesMuted ? 0 : noteVol;
+    if (noteMasterRef.current) noteMasterRef.current.gain.value = noteVolRef.current;
+  }, [noteVol, notesMuted]);
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = musicVol;
-  }, [musicVol]);
+    if (audioRef.current) audioRef.current.volume = musicMuted ? 0 : musicVol;
+  }, [musicVol, musicMuted]);
 
   const notesAudible = noteVol > 0;
 
@@ -386,36 +518,17 @@ export default function TimelineEditor({
     if (!a) return;
 
     const ctx = new AudioContext();
-    const offset = a.currentTime;
     const master = ctx.createGain();
     master.gain.value = noteVolRef.current;
     master.connect(ctx.destination);
     noteMasterRef.current = master;
 
-    for (const note of mixNotesRef.current) {
-      const dur = note.durationSec;
-      const startDelay = note.startSec - offset;
-      if (startDelay + dur < 0) continue;
-      // A note already under way when playback starts is clipped to its remaining part.
-      const scheduleAt = ctx.currentTime + Math.max(0, startDelay);
-      const remaining = startDelay < 0 ? dur + startDelay : dur;
-      if (remaining <= 0.02) continue;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 440 * Math.pow(2, (note.pitch - 69) / 12);
-      osc.connect(gain);
-      gain.connect(master);
-      const release = Math.min(0.08, remaining * 0.15);
-      gain.gain.setValueAtTime(0, scheduleAt);
-      gain.gain.linearRampToValueAtTime(0.25, scheduleAt + 0.02);
-      gain.gain.setValueAtTime(0.25, scheduleAt + remaining - release);
-      gain.gain.exponentialRampToValueAtTime(0.001, scheduleAt + remaining);
-      osc.start(scheduleAt);
-      osc.stop(scheduleAt + remaining + 0.05);
-    }
+    const scheduler = createToneScheduler(ctx, master, () => a.currentTime, () => mixNotesRef.current);
+    toneSchedulerRef.current = scheduler;
 
     return () => {
+      scheduler.stop();
+      if (toneSchedulerRef.current === scheduler) toneSchedulerRef.current = null;
       noteMasterRef.current = null;
       ctx.close().catch(() => {});
     };
@@ -431,30 +544,14 @@ export default function TimelineEditor({
     }
     const ctx = new AudioContext();
     notePlayCtxRef.current = ctx;
-    const offset = playheadSec;
     notePlayStartRef.current = ctx.currentTime;
-    notePlayOffsetRef.current = offset;
-
-    for (const note of notes) {
-      const startDelay = note.startSec - offset;
-      if (startDelay + note.durationSec < 0) continue;
-      const scheduleAt = ctx.currentTime + Math.max(0, startDelay);
-      const hz = 440 * Math.pow(2, (note.pitch - 69) / 12);
-      const dur = note.durationSec;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = hz;
-      const release = Math.min(0.08, dur * 0.15);
-      gain.gain.setValueAtTime(0, scheduleAt);
-      gain.gain.linearRampToValueAtTime(0.25, scheduleAt + 0.02);
-      gain.gain.setValueAtTime(0.25, scheduleAt + dur - release);
-      gain.gain.exponentialRampToValueAtTime(0.001, scheduleAt + dur);
-      osc.start(scheduleAt);
-      osc.stop(scheduleAt + dur + 0.05);
-    }
+    notePlayOffsetRef.current = playheadSec;
+    toneSchedulerRef.current = createToneScheduler(
+      ctx,
+      ctx.destination,
+      () => notePlayOffsetRef.current + (ctx.currentTime - notePlayStartRef.current),
+      () => mixNotesRef.current
+    );
 
     setMicTrace([]);
     micPendingRef.current = [];
@@ -468,11 +565,17 @@ export default function TimelineEditor({
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, [isNotePlaying, isPlaying, playheadSec, notes, duration, stopNotePlay]);
+  }, [isNotePlaying, isPlaying, playheadSec, duration, stopNotePlay]);
 
   const seekTo = useCallback((sec: number) => {
     const clamped = Math.max(0, sec);
     setPlayheadSec(clamped);
+    // Notes-only playback runs on its own clock: move it too, and drop tones scheduled for the old spot
+    if (notePlayCtxRef.current) {
+      notePlayOffsetRef.current = clamped;
+      notePlayStartRef.current = notePlayCtxRef.current.currentTime;
+    }
+    toneSchedulerRef.current?.reset();
     if (audioRef.current) audioRef.current.currentTime = clamped;
     if (videoRef.current) videoRef.current.currentTime = clamped;
   }, []);
@@ -641,6 +744,7 @@ export default function TimelineEditor({
   // ── Apply mic trace to note pitches ──────────────────────────────────────
   const applyMicTrace = useCallback(() => {
     if (micTrace.length === 0) return;
+    snapshot();
     setNotes((prev) =>
       prev.map((note) => {
         const pts = micTrace.filter(
@@ -664,7 +768,7 @@ export default function TimelineEditor({
         return { ...note, pitch: Math.max(MIC_MIN_PITCH, Math.min(MIC_MAX_PITCH, normalized)) };
       })
     );
-  }, [micTrace]);
+  }, [micTrace, snapshot]);
 
   useEffect(() => {
     return () => {
@@ -679,40 +783,137 @@ export default function TimelineEditor({
     };
   }, []);
 
+  const addModeRef = useRef(false);
+  useEffect(() => { addModeRef.current = addMode; }, [addMode]);
+
   // ── Drag note (move / resize) ─────────────────────────────────────────────
+  // Moving drags every selected note together; shift/ctrl-click adds or removes a note from the selection.
   const startDrag = useCallback(
     (e: React.MouseEvent, note: EditorNote, kind: "move" | "resize") => {
       e.preventDefault();
       e.stopPropagation();
-      setSelectedId(note.id);
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      const wasSelected = selectionRef.current.includes(note.id);
+      let group: string[];
+      if (kind === "resize") {
+        group = [note.id];
+        if (!wasSelected) setSelection([note.id]);
+      } else if (additive) {
+        if (wasSelected) {
+          setSelection((prev) => prev.filter((id) => id !== note.id));
+          return;
+        }
+        group = [...selectionRef.current, note.id];
+        setSelection(group);
+      } else if (wasSelected) {
+        group = selectionRef.current;
+      } else {
+        group = [note.id];
+        setSelection(group);
+      }
+
+      const origin = new Map<string, { startSec: number; pitch: number }>();
+      for (const n of mixNotesRef.current) {
+        if (group.includes(n.id)) origin.set(n.id, { startSec: n.startSec, pitch: n.pitch });
+      }
+      let minStart = Infinity;
+      let minPitch = Infinity;
+      let maxPitch = -Infinity;
+      for (const o of origin.values()) {
+        minStart = Math.min(minStart, o.startSec);
+        minPitch = Math.min(minPitch, o.pitch);
+        maxPitch = Math.max(maxPitch, o.pitch);
+      }
       const startX = e.clientX;
       const startY = e.clientY;
-      const { startSec, durationSec, pitch } = note;
+      const baseDuration = note.durationSec;
+      let moved = false;
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
+        if (!moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return; // a click, not a drag
+        if (!moved) snapshot();
+        moved = true;
         const pps = pxPerSecRef.current;
+        if (kind === "resize") {
+          setNotes((prev) =>
+            prev.map((n) => (n.id === note.id ? { ...n, durationSec: Math.max(0.05, baseDuration + dx / pps) } : n))
+          );
+          return;
+        }
+        const { lo, hi } = rangeRef.current;
+        // The group moves as one block: it stops at time 0 and at the edges of the pitch range
+        const dSec = Math.max(dx / pps, -minStart);
+        const dPitch = Math.max(lo - minPitch, Math.min(hi - maxPitch, -Math.round(dy / pxPitchRef.current)));
         setNotes((prev) =>
           prev.map((n) => {
-            if (n.id !== note.id) return n;
-            if (kind === "resize") return { ...n, durationSec: Math.max(0.05, durationSec + dx / pps) };
-            return {
-              ...n,
-              startSec: Math.max(0, startSec + dx / pps),
-              pitch: Math.max(rangeRef.current.lo, Math.min(rangeRef.current.hi, pitch - Math.round(dy / PX_PITCH))),
-            };
+            const o = origin.get(n.id);
+            return o ? { ...n, startSec: o.startSec + dSec, pitch: o.pitch + dPitch } : n;
           })
         );
       };
       const onUp = () => {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
+        // A plain click on a note of a group narrows the selection to that note
+        if (!moved && kind === "move" && !additive && group.length > 1) setSelection([note.id]);
       };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    []
+    [snapshot]
   );
+
+  // ── Rubber-band selection on empty grid ───────────────────────────────────
+  const startMarquee = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || addModeRef.current) return;
+    e.preventDefault();
+    const grid = e.currentTarget;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const base = e.shiftKey || e.ctrlKey || e.metaKey ? selectionRef.current : [];
+    // Grid-local coordinates, so the box stays attached to the content while the roll scrolls
+    const local = (cx: number, cy: number) => {
+      const r = grid.getBoundingClientRect();
+      return { x: cx - r.left, y: cy - r.top };
+    };
+    const anchor = local(startX, startY);
+    let active = false;
+    const onMove = (ev: MouseEvent) => {
+      if (!active && Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD) return;
+      active = true;
+      const c = local(ev.clientX, ev.clientY);
+      const box = {
+        x0: Math.min(anchor.x, c.x), x1: Math.max(anchor.x, c.x),
+        y0: Math.min(anchor.y, c.y), y1: Math.max(anchor.y, c.y),
+      };
+      setMarquee(box);
+      const pps = pxPerSecRef.current;
+      const rowH = pxPitchRef.current;
+      const hi = rangeRef.current.hi;
+      const hit = mixNotesRef.current
+        .filter((n) => {
+          const nx0 = n.startSec * pps;
+          const ny0 = (hi - n.pitch) * rowH;
+          return nx0 + n.durationSec * pps >= box.x0 && nx0 <= box.x1 && ny0 + rowH >= box.y0 && ny0 <= box.y1;
+        })
+        .map((n) => n.id)
+        .filter((id) => !base.includes(id));
+      setSelection([...base, ...hit]);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (active) {
+        setMarquee(null);
+        // The click that follows this mouseup must not also seek or clear the selection
+        suppressClickRef.current = true;
+        setTimeout(() => { suppressClickRef.current = false; }, 0);
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
 
   // ── Drag playhead ─────────────────────────────────────────────────────────
   const startPlayheadDrag = useCallback(
@@ -743,33 +944,35 @@ export default function TimelineEditor({
   );
 
   // ── Seek on grid single-click ─────────────────────────────────────────────
-  const addModeRef = useRef(false);
-  useEffect(() => { addModeRef.current = addMode; }, [addMode]);
 
   const handleGridClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      if (suppressClickRef.current) return;
       const rect = e.currentTarget.getBoundingClientRect();
       if (addModeRef.current) {
         const sec = Math.max(0, (e.clientX - rect.left) / pxPerSecRef.current);
         const yRel = e.clientY - rect.top;
         const { lo, hi } = rangeRef.current;
-        const pitch = Math.max(lo, Math.min(hi, Math.round(hi - yRel / PX_PITCH)));
+        const pitch = Math.max(lo, Math.min(hi, Math.round(hi - yRel / pxPitchRef.current)));
         const id = crypto.randomUUID();
         const newNote: EditorNote = { id, startSec: sec, durationSec: 0.3, pitch, syllable: "+", type: ":" };
+        snapshot();
         setNotes((prev) => [...prev, newNote].sort((a, b) => a.startSec - b.startSec));
-        setSelectedId(id);
+        setSelection([id]);
         setTimeout(() => { syllableInputRef.current?.focus(); syllableInputRef.current?.select(); }, 0);
       } else {
         const sec = (e.clientX - rect.left) / pxPerSecRef.current;
+        setSelection([]);
         seekTo(sec);
       }
     },
-    [seekTo]
+    [seekTo, snapshot]
   );
 
   // ── Split selected note ───────────────────────────────────────────────────
   const splitSelected = useCallback(() => {
     if (!selectedId) return;
+    snapshot();
     setNotes((prev) => {
       const idx = prev.findIndex((n) => n.id === selectedId);
       if (idx === -1) return prev;
@@ -785,34 +988,83 @@ export default function TimelineEditor({
       result.splice(idx, 1, a, b);
       return result;
     });
-  }, [selectedId]);
+  }, [selectedId, snapshot]);
+
+  // ── Copy / paste ──────────────────────────────────────────────────────────
+  // Copies keep their pitch and their spacing; pasting drops the first one at the playhead.
+  const copySelection = useCallback(() => {
+    const ids = new Set(selectionRef.current);
+    const picked = mixNotesRef.current.filter((n) => ids.has(n.id));
+    if (picked.length > 0) clipboardRef.current = picked.map((n) => ({ ...n }));
+    return picked.length > 0;
+  }, []);
+
+  const pasteClipboard = useCallback(() => {
+    const clip = clipboardRef.current;
+    if (clip.length === 0) return;
+    const first = Math.min(...clip.map((n) => n.startSec));
+    const at = playheadSecRef.current;
+    const pasted = clip.map((n) => ({ ...n, id: crypto.randomUUID(), startSec: Math.max(0, n.startSec - first + at) }));
+    snapshot();
+    setNotes((prev) => [...prev, ...pasted].sort((a, b) => a.startSec - b.startSec));
+    setSelection(pasted.map((n) => n.id));
+  }, [snapshot]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return; // don't steal input events
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return; // don't steal input events
+      const mod = e.ctrlKey || e.metaKey;
+      const ids = new Set(selection);
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-      if ((e.code === "Delete" || e.code === "Backspace") && selectedId) {
-        setNotes((prev) => withoutNote(prev, selectedId));
-        setSelectedId(null);
+      if (e.code === "Escape" && selection.length > 0) setSelection([]);
+      if (mod && (e.code === "KeyZ" || e.code === "KeyY")) {
+        e.preventDefault();
+        if (e.code === "KeyY" || e.shiftKey) redo();
+        else undo();
       }
-      if (e.code === "KeyS" && !e.ctrlKey && !e.metaKey && selectedId) {
+      if (mod && e.code === "KeyA") {
+        e.preventDefault();
+        setSelection(mixNotesRef.current.map((n) => n.id));
+      }
+      if (mod && e.code === "KeyC") {
+        e.preventDefault();
+        copySelection();
+      }
+      if (mod && e.code === "KeyX" && copySelection()) {
+        e.preventDefault();
+        snapshot();
+        setNotes((prev) => selection.reduce((acc, id) => withoutNote(acc, id), prev));
+        setSelection([]);
+      }
+      if (mod && e.code === "KeyV") {
+        e.preventDefault();
+        pasteClipboard();
+      }
+      if ((e.code === "Delete" || e.code === "Backspace") && selection.length > 0) {
+        snapshot();
+        setNotes((prev) => selection.reduce((acc, id) => withoutNote(acc, id), prev));
+        setSelection([]);
+      }
+      if (e.code === "KeyS" && !mod && selectedId) {
         e.preventDefault();
         splitSelected();
       }
       // L: this note opens a new phrase (a "-" line goes before it)
-      if (e.code === "KeyL" && !e.ctrlKey && !e.metaKey && selectedId) {
+      if (e.code === "KeyL" && !mod && selection.length > 0) {
         e.preventDefault();
-        setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, lineStart: !n.lineStart } : n)));
+        snapshot();
+        setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: !n.lineStart } : n)));
       }
       // G: golden on/off (rap notes keep their rap kind); F: freestyle on/off
-      if ((e.code === "KeyG" || e.code === "KeyF") && !e.ctrlKey && !e.metaKey && selectedId) {
+      if ((e.code === "KeyG" || e.code === "KeyF") && !mod && selection.length > 0) {
         e.preventDefault();
         const golden: Record<NoteType, NoteType> = { ":": "*", "*": ":", F: "*", R: "G", G: "R" };
+        snapshot();
         setNotes((prev) =>
           prev.map((n) => {
-            if (n.id !== selectedId) return n;
+            if (!ids.has(n.id)) return n;
             if (e.code === "KeyG") return { ...n, type: golden[n.type] };
             return { ...n, type: n.type === "F" ? ":" : "F" };
           })
@@ -821,11 +1073,11 @@ export default function TimelineEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, selectedId, splitSelected]);
+  }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, snapshot, undo, redo]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const playheadX = KEYS_W + playheadSec * pxPerSec;
-  const micY = micMidi !== null ? pitchToY(micMidi) + PX_PITCH / 2 : null;
+  const micY = micMidi !== null ? pitchToY(micMidi) + pxPitch / 2 : null;
 
   // ── Time ruler ────────────────────────────────────────────────────────────
   // Label spacing adapts to the zoom: the first step that leaves at least ~84 px between labels.
@@ -883,15 +1135,37 @@ export default function TimelineEditor({
           >
             ♪
           </button>
-          <label title={t("editor.musicTitle")} className="flex select-none items-center gap-2 text-zinc-300">
-            {t("editor.music")}
-            <RangeSlider value={musicVol} max={1} step={0.05} onChange={setMusicVol} label={t("editor.music")} className="w-16" />
-          </label>
-          <label title={t("editor.notesTitle")} className="flex select-none items-center gap-2 text-zinc-300">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            {t("editor.notes")}
-            <RangeSlider value={noteVol} max={1} step={0.05} onChange={setNoteVol} label={t("editor.notes")} color="#f59e0b" className="w-16" />
-          </label>
+          <div title={t("editor.musicTitle")} className="flex select-none items-center gap-1.5 text-zinc-300">
+            <button
+              onClick={() => setMusicMuted((m) => !m)}
+              aria-pressed={musicMuted}
+              title={musicMuted ? t("editor.unmute") : t("editor.mute")}
+              className={`${chip} !px-2 ${musicMuted ? "!border-red-900 !bg-red-950 !text-red-300 line-through" : ""}`}
+            >
+              {t("editor.music")}
+            </button>
+            <RangeSlider
+              value={musicMuted ? 0 : musicVol} max={1} step={0.05}
+              onChange={(v) => { setMusicVol(v); if (v > 0) setMusicMuted(false); }}
+              label={t("editor.music")} className="w-16"
+            />
+          </div>
+          <div title={t("editor.notesTitle")} className="flex select-none items-center gap-1.5 text-zinc-300">
+            <button
+              onClick={() => setNotesMuted((m) => !m)}
+              aria-pressed={notesMuted}
+              title={notesMuted ? t("editor.unmute") : t("editor.mute")}
+              className={`${chip} !px-2 ${notesMuted ? "!border-red-900 !bg-red-950 !text-red-300 line-through" : ""}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              {t("editor.notes")}
+            </button>
+            <RangeSlider
+              value={notesMuted ? 0 : noteVol} max={1} step={0.05}
+              onChange={(v) => { setNoteVol(v); if (v > 0) setNotesMuted(false); }}
+              label={t("editor.notes")} color="#f59e0b" className="w-16"
+            />
+          </div>
         </div>
 
         <span className={divider} aria-hidden />
@@ -908,9 +1182,17 @@ export default function TimelineEditor({
           <label className="flex items-center gap-2 text-zinc-400">
             <span>{t("editor.zoom")}</span>
             <RangeSlider
-              value={pxPerSec} max={400} step={10}
-              onChange={(v) => setPxPerSec(Math.max(40, v))}
+              value={pxPerSec} max={PX_SEC_MAX} step={10}
+              onChange={(v) => setPxPerSec(Math.max(PX_SEC_MIN, v))}
               label={t("editor.zoom")} className="w-20"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-zinc-400" title={t("editor.zoomVTitle")}>
+            <span>{t("editor.zoomV")}</span>
+            <RangeSlider
+              value={pxPitch} max={PX_PITCH_MAX} step={1}
+              onChange={(v) => setPxPitch(Math.max(PX_PITCH_MIN, v))}
+              label={t("editor.zoomV")} className="w-20"
             />
           </label>
         </div>
@@ -932,14 +1214,19 @@ export default function TimelineEditor({
 
           {selectedNote && (
             <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-1.5 py-1">
+              {selection.length > 1 && (
+                <span className="px-1 font-medium text-blue-300">{t("editor.selectedCount", { n: selection.length })}</span>
+              )}
               <input
                 ref={syllableInputRef}
                 value={selectedNote.syllable}
-                onChange={(e) =>
-                  setNotes((prev) =>
-                    prev.map((n) => n.id === selectedId ? { ...n, syllable: e.target.value } : n)
-                  )
-                }
+                onFocus={() => { syllableEditedRef.current = false; }}
+                onChange={(e) => {
+                  // One undo step per editing session of the field
+                  if (!syllableEditedRef.current) { snapshot(); syllableEditedRef.current = true; }
+                  const value = e.target.value;
+                  setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, syllable: value } : n)));
+                }}
                 placeholder={t("editor.syllable")}
                 className="h-8 w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 focus:border-blue-500 focus:outline-none"
               />
@@ -947,9 +1234,12 @@ export default function TimelineEditor({
                 {t("editor.split")}
               </button>
               <button
-                onClick={() =>
-                  setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, lineStart: !n.lineStart } : n)))
-                }
+                onClick={() => {
+                  const ids = new Set(selection);
+                  const next = !selectedNote.lineStart;
+                  snapshot();
+                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: next } : n)));
+                }}
                 title={t("editor.newPhraseTitle")}
                 aria-pressed={!!selectedNote.lineStart}
                 className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
@@ -958,11 +1248,12 @@ export default function TimelineEditor({
               </button>
               <select
                 value={selectedNote.type}
-                onChange={(e) =>
-                  setNotes((prev) =>
-                    prev.map((n) => n.id === selectedId ? { ...n, type: e.target.value as NoteType } : n)
-                  )
-                }
+                onChange={(e) => {
+                  const ids = new Set(selection);
+                  const type = e.target.value as NoteType;
+                  snapshot();
+                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, type } : n)));
+                }}
                 className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 text-xs text-zinc-200"
               >
                 <option value=":">{t("editor.noteNormal")}</option>
@@ -972,7 +1263,11 @@ export default function TimelineEditor({
                 <option value="G">★ {t("editor.noteRapGolden")}</option>
               </select>
               <button
-                onClick={() => { setNotes((prev) => withoutNote(prev, selectedId!)); setSelectedId(null); }}
+                onClick={() => {
+                  snapshot();
+                  setNotes((prev) => selection.reduce((acc, id) => withoutNote(acc, id), prev));
+                  setSelection([]);
+                }}
                 title={t("editor.deleteTitle")}
                 className={`${chip} !border-red-900 !bg-transparent !text-red-400 hover:!bg-red-950`}
               >
@@ -1123,11 +1418,20 @@ export default function TimelineEditor({
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-zinc-950">
         {/* Time ruler: sticks to the top while the roll scrolls vertically */}
         <div
-          className="sticky top-0 z-50 cursor-pointer select-none border-b border-zinc-800 bg-zinc-900"
+          className="sticky top-0 z-50 cursor-col-resize select-none border-b border-zinc-800 bg-zinc-900"
           style={{ width: totalW, height: RULER_H }}
           onMouseDown={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
-            seekTo(Math.max(0, (e.clientX - rect.left - KEYS_W) / pxPerSecRef.current));
+            const toSec = (clientX: number) => Math.max(0, (clientX - rect.left - KEYS_W) / pxPerSecRef.current);
+            e.preventDefault();
+            seekTo(toSec(e.clientX));
+            const onMove = (ev: MouseEvent) => seekTo(toSec(ev.clientX));
+            const onUp = () => {
+              window.removeEventListener("mousemove", onMove);
+              window.removeEventListener("mouseup", onUp);
+            };
+            window.addEventListener("mousemove", onMove);
+            window.addEventListener("mouseup", onUp);
           }}
         >
           <div
@@ -1164,7 +1468,7 @@ export default function TimelineEditor({
               return (
                 <div
                   key={p}
-                  style={{ position: "absolute", top: i * PX_PITCH, left: 0, width: KEYS_W - 1, height: PX_PITCH }}
+                  style={{ position: "absolute", top: i * pxPitch, left: 0, width: KEYS_W - 1, height: pxPitch }}
                   className={`flex items-center border-b border-r text-[10px] select-none transition-colors ${
                     highlighted
                       ? "border-green-500 bg-green-400 text-white"
@@ -1185,13 +1489,14 @@ export default function TimelineEditor({
           <div
             style={{ position: "absolute", left: KEYS_W, top: 0, right: 0, height: rollH, zIndex: 1, cursor: addMode ? "crosshair" : "default" }}
             onClick={handleGridClick}
+            onMouseDown={startMarquee}
           >
             {Array.from({ length: range.hi - range.lo + 1 }, (_, i) => {
               const p = range.hi - i;
               return (
                 <div
                   key={p}
-                  style={{ position: "absolute", top: i * PX_PITCH, left: 0, right: 0, height: PX_PITCH }}
+                  style={{ position: "absolute", top: i * pxPitch, left: 0, right: 0, height: pxPitch }}
                   className={`${isBlack(p) ? "bg-zinc-950" : "bg-zinc-900"} ${p % 12 === 0 ? "border-b border-zinc-700" : ""}`}
                 />
               );
@@ -1206,7 +1511,7 @@ export default function TimelineEditor({
               style={{
                 position: "absolute",
                 left: KEYS_W + pt.timeSec * pxPerSec - 2,
-                top: pitchToY(pt.midi) + PX_PITCH / 2 - 2,
+                top: pitchToY(pt.midi) + pxPitch / 2 - 2,
                 width: 4, height: 4,
                 borderRadius: "50%",
                 background: "rgba(34,197,94,0.65)",
@@ -1234,13 +1539,13 @@ export default function TimelineEditor({
             const x = KEYS_W + note.startSec * pxPerSec;
             const y = pitchToY(note.pitch);
             const w = note.durationSec * pxPerSec;
-            const sel = note.id === selectedId;
+            const sel = selectedSet.has(note.id);
             return (
               <div
                 key={note.id}
                 style={{
                   position: "absolute", left: x + 1, top: y + 2,
-                  width: Math.max(w - 2, 8), height: PX_PITCH - 4,
+                  width: Math.max(w - 2, 8), height: pxPitch - 4,
                   zIndex: sel ? 30 : 10, cursor: "grab", userSelect: "none",
                   ...noteLook(note.type),
                   boxShadow: sel ? "0 0 0 2px #fff, 0 4px 12px rgba(0,0,0,0.5)" : "0 1px 3px rgba(0,0,0,0.45)",
@@ -1261,18 +1566,32 @@ export default function TimelineEditor({
             );
           })}
 
-          {/* Playhead — draggable */}
+          {/* Playhead: the grab area sits under the notes, so a note next to it is never stolen */}
           <div
             style={{
-              position: "absolute", left: playheadX - 4, top: 0,
-              width: 10, height: rollH,
-              zIndex: 40, cursor: "col-resize",
+              position: "absolute", left: playheadX - 6, top: 0,
+              width: 12, height: rollH,
+              zIndex: 8, cursor: "col-resize",
             }}
             onMouseDown={startPlayheadDrag}
-          >
-            {/* Visual line centred in the hit area */}
-            <div style={{ position: "absolute", left: 4, top: 0, width: 2, height: "100%", background: "#ef4444" }} />
-          </div>
+          />
+          <div
+            style={{
+              position: "absolute", left: playheadX - 1, top: 0, width: 2, height: rollH,
+              background: "#ef4444", zIndex: 40, pointerEvents: "none",
+            }}
+          />
+
+          {/* Rubber-band selection */}
+          {marquee && (
+            <div
+              style={{
+                position: "absolute", left: KEYS_W + marquee.x0, top: marquee.y0,
+                width: marquee.x1 - marquee.x0, height: marquee.y1 - marquee.y0,
+                border: "1px solid #60a5fa", background: "rgba(59,130,246,0.15)", zIndex: 45, pointerEvents: "none",
+              }}
+            />
+          )}
 
           {/* Mic guide line */}
           {micEnabled && micY !== null && (
