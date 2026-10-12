@@ -215,6 +215,13 @@ export default function TimelineEditor({
       return next;
     });
   // Selected notes; the last one is the "primary" the toolbar edits.
+  const [followPlayhead, setFollowPlayhead] = useState(() => {
+    try { return localStorage.getItem("ultrasongs.editor.follow") !== "0"; } catch { return true; }
+  });
+  const toggleFollow = (on: boolean) => {
+    setFollowPlayhead(on);
+    try { localStorage.setItem("ultrasongs.editor.follow", on ? "1" : "0"); } catch { /* ignore */ }
+  };
   const [selection, setSelection] = useState<string[]>([]);
   const selectionRef = useRef<string[]>([]);
   useEffect(() => { selectionRef.current = selection; }, [selection]);
@@ -603,16 +610,16 @@ export default function TimelineEditor({
     osc.stop(now + dur);
   }, []);
 
-  // Auto-scroll playhead into view
+  // Auto-scroll playhead into view (optional: some people prefer to keep the view where they put it)
   useEffect(() => {
-    if ((!isPlaying && !isNotePlaying) || !scrollRef.current) return;
+    if (!followPlayhead || (!isPlaying && !isNotePlaying) || !scrollRef.current) return;
     const x = playheadSec * pxPerSec;
     const container = scrollRef.current;
     const visible = container.scrollLeft + container.clientWidth - KEYS_W;
     if (x > visible - 40 || x < container.scrollLeft) {
       container.scrollTo({ left: Math.max(0, x - 80) });
     }
-  }, [isPlaying, isNotePlaying, playheadSec, pxPerSec]);
+  }, [followPlayhead, isPlaying, isNotePlaying, playheadSec, pxPerSec]);
 
   // ── Microphone ────────────────────────────────────────────────────────────
   const startMic = useCallback(async (deviceId?: string) => {
@@ -789,13 +796,13 @@ export default function TimelineEditor({
   // ── Drag note (move / resize) ─────────────────────────────────────────────
   // Moving drags every selected note together; shift/ctrl-click adds or removes a note from the selection.
   const startDrag = useCallback(
-    (e: React.MouseEvent, note: EditorNote, kind: "move" | "resize") => {
+    (e: React.MouseEvent, note: EditorNote, kind: "move" | "resize" | "resizeLeft") => {
       e.preventDefault();
       e.stopPropagation();
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
       const wasSelected = selectionRef.current.includes(note.id);
       let group: string[];
-      if (kind === "resize") {
+      if (kind !== "move") {
         group = [note.id];
         if (!wasSelected) setSelection([note.id]);
       } else if (additive) {
@@ -827,6 +834,8 @@ export default function TimelineEditor({
       const startX = e.clientX;
       const startY = e.clientY;
       const baseDuration = note.durationSec;
+      const baseStart = note.startSec;
+      const baseEnd = note.startSec + note.durationSec;
       let moved = false;
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX;
@@ -838,6 +847,14 @@ export default function TimelineEditor({
         if (kind === "resize") {
           setNotes((prev) =>
             prev.map((n) => (n.id === note.id ? { ...n, durationSec: Math.max(0.05, baseDuration + dx / pps) } : n))
+          );
+          return;
+        }
+        if (kind === "resizeLeft") {
+          // The end stays put: only the start moves (never before 0, never past the end)
+          const start = Math.max(0, Math.min(baseEnd - 0.05, baseStart + dx / pps));
+          setNotes((prev) =>
+            prev.map((n) => (n.id === note.id ? { ...n, startSec: start, durationSec: baseEnd - start } : n))
           );
           return;
         }
@@ -962,7 +979,6 @@ export default function TimelineEditor({
         setTimeout(() => { syllableInputRef.current?.focus(); syllableInputRef.current?.select(); }, 0);
       } else {
         const sec = (e.clientX - rect.left) / pxPerSecRef.current;
-        setSelection([]);
         seekTo(sec);
       }
     },
@@ -1201,6 +1217,15 @@ export default function TimelineEditor({
               label={t("editor.zoom")} className="w-20"
             />
           </label>
+          <label className="flex select-none items-center gap-1.5 text-zinc-400" title={t("editor.followTitle")}>
+            <input
+              type="checkbox"
+              checked={followPlayhead}
+              onChange={(e) => toggleFollow(e.target.checked)}
+              className="h-3.5 w-3.5 accent-blue-500"
+            />
+            <span>{t("editor.follow")}</span>
+          </label>
           <label className="flex items-center gap-2 text-zinc-400" title={t("editor.zoomVTitle")}>
             <span>{t("editor.zoomV")}</span>
             <RangeSlider
@@ -1226,69 +1251,6 @@ export default function TimelineEditor({
             +
           </button>
 
-          {selectedNote && (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-1.5 py-1">
-              {selection.length > 1 && (
-                <span className="px-1 font-medium text-blue-300">{t("editor.selectedCount", { n: selection.length })}</span>
-              )}
-              <input
-                ref={syllableInputRef}
-                value={selectedNote.syllable}
-                onFocus={() => { syllableEditedRef.current = false; }}
-                onChange={(e) => {
-                  // One undo step per editing session of the field
-                  if (!syllableEditedRef.current) { snapshot(); syllableEditedRef.current = true; }
-                  const value = e.target.value;
-                  setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, syllable: value } : n)));
-                }}
-                placeholder={t("editor.syllable")}
-                className="h-8 w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 focus:border-blue-500 focus:outline-none"
-              />
-              <button onClick={splitSelected} title={t("editor.splitTitle")} className={chip}>
-                {t("editor.split")}
-              </button>
-              <button
-                onClick={() => {
-                  const ids = new Set(selection);
-                  const next = !selectedNote.lineStart;
-                  snapshot();
-                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: next } : n)));
-                }}
-                title={t("editor.newPhraseTitle")}
-                aria-pressed={!!selectedNote.lineStart}
-                className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
-              >
-                ¶ {t("editor.newPhrase")}
-              </button>
-              <select
-                value={selectedNote.type}
-                onChange={(e) => {
-                  const ids = new Set(selection);
-                  const type = e.target.value as NoteType;
-                  snapshot();
-                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, type } : n)));
-                }}
-                className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 text-xs text-zinc-200"
-              >
-                <option value=":">{t("editor.noteNormal")}</option>
-                <option value="*">★ {t("editor.noteGolden")}</option>
-                <option value="F">{t("editor.noteFreestyle")}</option>
-                <option value="R">{t("editor.noteRap")}</option>
-                <option value="G">★ {t("editor.noteRapGolden")}</option>
-              </select>
-              <button
-                onClick={() => {
-                  snapshot();
-                  setNotes((prev) => selection.reduce((acc, id) => withoutNote(acc, id), prev));
-                  setSelection([]);
-                }}
-                title={t("editor.deleteTitle")}
-                className={`${chip} !border-red-900 !bg-transparent !text-red-400 hover:!bg-red-950`}
-              >
-                {t("editor.delete")}
-              </button>
-            </div>
-          )}
         </div>
 
         <span className={divider} aria-hidden />
@@ -1571,7 +1533,11 @@ export default function TimelineEditor({
               >
                 {(note.type === "*" || note.type === "G") && <span className="mr-0.5">★</span>}
                 {note.syllable}
-                {/* Resize handle */}
+                {/* Resize handles: left keeps the end fixed, right keeps the start fixed */}
+                <div
+                  style={{ position: "absolute", left: 0, top: 0, width: Math.min(6, w / 3), height: "100%", cursor: "ew-resize" }}
+                  onMouseDown={(e) => startDrag(e, note, "resizeLeft")}
+                />
                 <div
                   style={{ position: "absolute", right: 0, top: 0, width: 6, height: "100%", cursor: "ew-resize" }}
                   onMouseDown={(e) => startDrag(e, note, "resize")}
@@ -1620,7 +1586,7 @@ export default function TimelineEditor({
       {/* Video thumbnail, floating over the roll so it takes no layout space */}
       {videoUrl && (
         <div
-          className={`pointer-events-none absolute bottom-11 right-6 z-50 w-60 overflow-hidden rounded-lg border border-zinc-700 bg-black shadow-2xl shadow-black/60 ${
+          className={`pointer-events-none absolute bottom-14 right-6 z-50 w-60 overflow-hidden rounded-lg border border-zinc-700 bg-black shadow-2xl shadow-black/60 ${
             showVideo ? "" : "hidden"
           }`}
         >
@@ -1628,7 +1594,74 @@ export default function TimelineEditor({
         </div>
       )}
 
-      <div className="border-t border-zinc-800 bg-zinc-900 px-4 py-1.5 text-xs text-zinc-400">{t("editor.help")}</div>
+      {/* Fixed height: the note editor lives here, not in the toolbar, so selecting a note never shifts the roll */}
+      <div className="flex h-12 items-center overflow-x-auto border-t border-zinc-800 bg-zinc-900 px-4 text-xs text-zinc-400">
+        {selectedNote ? (
+            <div className="flex items-center gap-1.5">
+              {selection.length > 1 && (
+                <span className="px-1 font-medium text-blue-300">{t("editor.selectedCount", { n: selection.length })}</span>
+              )}
+              <input
+                ref={syllableInputRef}
+                value={selectedNote.syllable}
+                onFocus={() => { syllableEditedRef.current = false; }}
+                onChange={(e) => {
+                  // One undo step per editing session of the field
+                  if (!syllableEditedRef.current) { snapshot(); syllableEditedRef.current = true; }
+                  const value = e.target.value;
+                  setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, syllable: value } : n)));
+                }}
+                placeholder={t("editor.syllable")}
+                className="h-8 w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 focus:border-blue-500 focus:outline-none"
+              />
+              <button onClick={splitSelected} title={t("editor.splitTitle")} className={chip}>
+                {t("editor.split")}
+              </button>
+              <button
+                onClick={() => {
+                  const ids = new Set(selection);
+                  const next = !selectedNote.lineStart;
+                  snapshot();
+                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: next } : n)));
+                }}
+                title={t("editor.newPhraseTitle")}
+                aria-pressed={!!selectedNote.lineStart}
+                className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
+              >
+                ¶ {t("editor.newPhrase")}
+              </button>
+              <select
+                value={selectedNote.type}
+                onChange={(e) => {
+                  const ids = new Set(selection);
+                  const type = e.target.value as NoteType;
+                  snapshot();
+                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, type } : n)));
+                }}
+                className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-1.5 text-xs text-zinc-200"
+              >
+                <option value=":">{t("editor.noteNormal")}</option>
+                <option value="*">★ {t("editor.noteGolden")}</option>
+                <option value="F">{t("editor.noteFreestyle")}</option>
+                <option value="R">{t("editor.noteRap")}</option>
+                <option value="G">★ {t("editor.noteRapGolden")}</option>
+              </select>
+              <button
+                onClick={() => {
+                  snapshot();
+                  setNotes((prev) => selection.reduce((acc, id) => withoutNote(acc, id), prev));
+                  setSelection([]);
+                }}
+                title={t("editor.deleteTitle")}
+                className={`${chip} !border-red-900 !bg-transparent !text-red-400 hover:!bg-red-950`}
+              >
+                {t("editor.delete")}
+              </button>
+            </div>
+        ) : (
+          <span className="truncate">{t("editor.help")}</span>
+        )}
+      </div>
 
       <audio
         ref={audioRef}

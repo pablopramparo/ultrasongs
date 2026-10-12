@@ -113,6 +113,8 @@
   "editor.mute": "Mute (keeps the volume)",
   "editor.selectedCount": "{n} selected",
   "editor.zoomVTitle": "Vertical zoom (row height)",
+  "editor.follow": "Follow",
+  "editor.followTitle": "Scroll the view along with the playhead while playing",
   "editor.zoomV": "V-zoom",
   "editor.mic": "Mic",
   "editor.micOn": "Mic on",

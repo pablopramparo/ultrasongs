@@ -113,6 +113,8 @@
   "editor.mute": "Silenciar (conserva el volumen)",
   "editor.selectedCount": "{n} seleccionadas",
   "editor.zoomVTitle": "Zoom vertical (alto de las filas)",
+  "editor.follow": "Seguir",
+  "editor.followTitle": "Desplazar la vista junto con el cursor mientras se reproduce",
   "editor.zoomV": "Zoom V",
   "editor.mic": "Mic",
   "editor.micOn": "Mic activo",
