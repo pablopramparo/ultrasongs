@@ -1,11 +1,11 @@
 {
-  "version": "0.3.1",
-  "notes": "Editor: Space always plays/pauses, note panel in a fixed bottom bar (no layout jump), selection kept when seeking, optional follow-playhead, resize notes from the left edge.",
-  "pub_date": "2026-10-12T20:02:49.709Z",
+  "version": "0.3.2",
+  "notes": "Editor: phrase end before instrumental parts, draggable video thumbnail.",
+  "pub_date": "2026-10-12T20:24:17.041Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0EvTzlMcU1sMmRBdTFFMEtoVlIxeUZlS0dhbkdsWCtPVzJ6UFJ6anZUelBPcmlxaXpPTmdVOUxZRW1oS2RJSExORDdmZUZ5a0t5bEYyWVh1TFEwOHdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODM1MzY5CWZpbGU6VWx0cmFzb25nc18wLjMuMV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjEKT2xtU2p5VWJ5dmlLL2hFZXY1QlMrd2dtOU4yNmlXRGdwdWtHQVU5RHNCWmoraXlVN2hzZlVDVnFJZEkzRUJsNFRaRjhTYmN6SWVtTXZtRGd6SWE5RGc9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.1/Ultrasongs_0.3.1_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ00xUXZLcWlrWnhiL1dHTWFIbFJ3ZjdnZXZabUFTeU9nb1NRSjdnMUhrTFE1TGJ6N1NjMVc3eC95VC9yVnhPRTRNaFVvMFd6cDdqeU5KdDB6NWVRemcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODM2NjU2CWZpbGU6VWx0cmFzb25nc18wLjMuMl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjIKMnlyWUFBaGVrb3VxcVhweWc4QmJkUFhJMlIxYzlKNi9mbFBEQWlaVkEybmcrMHlxWlFEWGNnNHdpaml3WTRNb3RmRnQwSmNOZGpFbnJNRTZ6Y0FPQUE9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.2/Ultrasongs_0.3.2_x64-setup.exe"
     }
   }
 }
