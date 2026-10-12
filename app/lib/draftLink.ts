@@ -72,3 +72,17 @@ export async function linkDraft(draftId: string, folder: string, txt: string): P
   await writeFile(jsonPath, JSON.stringify({ ...draft, songFolder: folder, syncedHash: hashSongText(txt) }));
   await releaseFolder(folder, draftId);
 }
+
+/** The Songs folder this draft is linked to, if any. */
+export async function linkedFolder(draftId: string): Promise<string | null> {
+  const dir = draftDir(draftId);
+  if (!dir) return null;
+  const jsonPath = path.join(dir, "draft.json");
+  if (!existsSync(jsonPath)) return null;
+  try {
+    const d = JSON.parse(await readFile(jsonPath, "utf-8"));
+    return typeof d.songFolder === "string" && d.songFolder ? d.songFolder : null;
+  } catch {
+    return null;
+  }
+}
