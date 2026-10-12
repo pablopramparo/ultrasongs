@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
 }
 
-const SECTIONS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
+const SECTIONS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"] as const;
 
 /**
  * Everything the editor can do, grouped. Each section's items live in one translation string, one

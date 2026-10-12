@@ -159,6 +159,8 @@
   "help.s7.items": "Mic — Turn the microphone on, then sing along while the song plays\nSens / octave — Noise threshold and octave shift of what the microphone hears\nApply — Sets each note's pitch from what you sang",
   "help.s8.title": "Saving and exporting",
   "help.s8.items": "Save — Saves the draft (it is also saved automatically while you work)\nExport — Generates the Ultrastar .txt and its files",
+  "help.s9.title": "Tips for a good song",
+  "help.s9.items": "Golden notes — Use few per song, on long, clear syllables or key words (often the last held note of a phrase). If everything is golden, nothing stands out.\nNote length — Make notes a little shorter than what is sung, so a player is not penalised for stopping slightly early.\nPhrases — Start a new line where the singer breathes or the lyric makes sense, not just at every silence.\nInstrumental parts — Mark the last note of the phrase with Phrase end (B) so the lyric clears instead of hanging on screen.\nSpoken / shouted parts — Use freestyle (F), or rap notes when rhythm matters but pitch does not.\nCheck it — Sing along with the microphone on to see whether the pitches are comfortable, then listen with the Notes volume up.",
   "editor.zoomVTitle": "Vertical zoom (row height)",
   "editor.follow": "Follow",
   "editor.followTitle": "Scroll the view along with the playhead while playing",

@@ -159,6 +159,8 @@
   "help.s7.items": "Mic — Activa el micrófono; cantá mientras suena la canción\nSens / octava — Umbral de ruido y desplazamiento de octava de lo que oye el micrófono\nAplicar — Asigna a cada nota el tono que cantaste",
   "help.s8.title": "Guardar y exportar",
   "help.s8.items": "Guardar — Guarda el borrador (también se guarda solo mientras trabajás)\nExportar — Genera el .txt de Ultrastar y sus archivos",
+  "help.s9.title": "Consejos para una buena canción",
+  "help.s9.items": "Notas doradas — Pocas por canción, en sílabas largas y claras o en palabras clave (a menudo la última nota sostenida de una frase). Si todo es dorado, nada se destaca.\nDuración — Hacé las notas un poco más cortas que lo cantado, para que el jugador no pierda puntos por cortar apenas antes.\nFrases — Empezá una línea nueva donde el cantante respira o la letra tiene sentido, no solo en cada silencio.\nPartes instrumentales — Marcá la última nota de la frase con Fin de frase (B) para que la letra se limpie y no quede colgada en pantalla.\nPartes habladas o gritadas — Usá libre (F), o notas rap cuando importa el ritmo pero no el tono.\nProbalo — Cantá con el micrófono activo para ver si los tonos son cómodos, y escuchalo con el volumen de Notas arriba.",
   "editor.zoomVTitle": "Zoom vertical (alto de las filas)",
   "editor.follow": "Seguir",
   "editor.followTitle": "Desplazar la vista junto con el cursor mientras se reproduce",
