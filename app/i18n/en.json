@@ -145,7 +145,7 @@
   "editor.helpButton": "Help: what everything does",
   "help.title": "Timeline editor help",
   "help.s1.title": "Playback",
-  "help.s1.items": "Space — Play / pause the song\n♪ button — Play only the synthesized notes, without the song (to check the melody)\nRuler (click or drag) — Move the playhead; the red line itself can be dragged too\nFollow — The view scrolls along with the playhead while playing (you can turn it off)\nMusic / Notes — Volume sliders; click the name to mute, click again to get the volume back",
+  "help.s1.items": "Space — Play / pause the song\nHold Space + drag — Move the view around (hand tool); a quick tap of Space still plays / pauses\n♪ button — Play only the synthesized notes, without the song (to check the melody)\nRuler (click or drag) — Move the playhead; the red line itself can be dragged too\nFollow — The view scrolls along with the playhead while playing (you can turn it off)\nMusic / Notes — Volume sliders; click the name to mute, click again to get the volume back",
   "help.s2.title": "Notes",
   "help.s2.items": "Click a note — Select it (you hear its tone)\nDrag a note — Move it in time and pitch\nDrag left / right edge — Change where it starts / how long it is\n+ button, then click the roll — Add a note\nS — Split the note in two\nDel / Backspace — Delete the selected notes",
   "help.s3.title": "Selecting several",

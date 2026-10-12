@@ -145,7 +145,7 @@
   "editor.helpButton": "Ayuda: qué hace cada cosa",
   "help.title": "Ayuda del editor",
   "help.s1.title": "Reproducción",
-  "help.s1.items": "Espacio — Reproducir / pausar la canción\nBotón ♪ — Reproducir solo las notas sintetizadas, sin la canción (para revisar la melodía)\nRegla (click o arrastre) — Mover el cursor; la línea roja también se puede arrastrar\nSeguir — La vista acompaña al cursor mientras se reproduce (se puede desactivar)\nMúsica / Notas — Volumen; clic en el nombre para silenciar, otro clic recupera el volumen",
+  "help.s1.items": "Espacio — Reproducir / pausar la canción\nMantener Espacio + arrastrar — Mover la vista (mano); un toque rápido de Espacio sigue reproduciendo / pausando\nBotón ♪ — Reproducir solo las notas sintetizadas, sin la canción (para revisar la melodía)\nRegla (click o arrastre) — Mover el cursor; la línea roja también se puede arrastrar\nSeguir — La vista acompaña al cursor mientras se reproduce (se puede desactivar)\nMúsica / Notas — Volumen; clic en el nombre para silenciar, otro clic recupera el volumen",
   "help.s2.title": "Notas",
   "help.s2.items": "Click en una nota — Seleccionarla (se oye su tono)\nArrastrar una nota — Moverla en el tiempo y en el tono\nArrastrar borde izquierdo / derecho — Cambiar dónde empieza / cuánto dura\nBotón + y click en el roll — Agregar una nota\nS — Dividir la nota en dos\nSupr / Retroceso — Eliminar las notas seleccionadas",
   "help.s3.title": "Seleccionar varias",

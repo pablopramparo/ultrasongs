@@ -278,6 +278,14 @@ export default function TimelineEditor({
   const [exportNoticeOpen, setExportNoticeOpen] = useState(false);
   const helpOpenRef = useRef(false);
   useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
+  // Hand tool: hold Space and drag to pan the roll. A plain tap of Space still plays/pauses; it is
+  // decided on release, and cancelled if the key was used to drag.
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const spaceHeldRef = useRef(false);
+  const spaceUsedRef = useRef(false);
+  // The click that ends a pan must not reach the grid or a note (it would seek / play a tone)
+  const panClickGuardRef = useRef(false);
   const [selection, setSelection] = useState<string[]>([]);
   const selectionRef = useRef<string[]>([]);
   useEffect(() => { selectionRef.current = selection; }, [selection]);
@@ -668,14 +676,14 @@ export default function TimelineEditor({
 
   // Auto-scroll playhead into view (optional: some people prefer to keep the view where they put it)
   useEffect(() => {
-    if (!followPlayhead || (!isPlaying && !isNotePlaying) || !scrollRef.current) return;
+    if (!followPlayhead || panning || (!isPlaying && !isNotePlaying) || !scrollRef.current) return;
     const x = playheadSec * pxPerSec;
     const container = scrollRef.current;
     const visible = container.scrollLeft + container.clientWidth - KEYS_W;
     if (x > visible - 40 || x < container.scrollLeft) {
       container.scrollTo({ left: Math.max(0, x - 80) });
     }
-  }, [followPlayhead, isPlaying, isNotePlaying, playheadSec, pxPerSec]);
+  }, [followPlayhead, panning, isPlaying, isNotePlaying, playheadSec, pxPerSec]);
 
   // ── Microphone ────────────────────────────────────────────────────────────
   const startMic = useCallback(async (deviceId?: string) => {
@@ -1121,7 +1129,14 @@ export default function TimelineEditor({
       if (typing) return;
       const mod = e.ctrlKey || e.metaKey;
       const ids = new Set(selection);
-      if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!e.repeat && !spaceHeldRef.current) {
+          spaceHeldRef.current = true;
+          spaceUsedRef.current = false;
+          setSpaceHeld(true);
+        }
+      }
       if (e.code === "Escape" && selection.length > 0) setSelection([]);
       if (mod && (e.code === "KeyZ" || e.code === "KeyY")) {
         e.preventDefault();
@@ -1182,15 +1197,56 @@ export default function TimelineEditor({
     };
     // A focused button would also "click" on Space release, toggling it on top of play/pause
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" && (e.target as HTMLElement).tagName === "BUTTON") e.preventDefault();
+      if (e.code !== "Space") return;
+      if ((e.target as HTMLElement).tagName === "BUTTON") e.preventDefault();
+      if (!spaceHeldRef.current) return;
+      spaceHeldRef.current = false;
+      setSpaceHeld(false);
+      // A tap plays/pauses; holding Space to drag the roll does not
+      if (!spaceUsedRef.current) togglePlay();
+    };
+    // Losing focus while Space is down must not leave the hand stuck
+    const onBlur = () => {
+      spaceHeldRef.current = false;
+      setSpaceHeld(false);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
     };
   }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, toggleBreakAfter, snapshot, undo, redo]);
+
+  // ── Hand tool ─────────────────────────────────────────────────────────────
+  // Captured before notes, grid, ruler or playhead see the press, so Space + drag never edits anything.
+  const startPan = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!spaceHeldRef.current || e.button !== 0) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    spaceUsedRef.current = true;
+    setPanning(true);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const left = el.scrollLeft;
+    const top = el.scrollTop;
+    const onMove = (ev: MouseEvent) => {
+      el.scrollTo({ left: left - (ev.clientX - startX), top: top - (ev.clientY - startY) });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setPanning(false);
+      panClickGuardRef.current = true;
+      setTimeout(() => { panClickGuardRef.current = false; }, 0);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const playheadX = KEYS_W + playheadSec * pxPerSec;
@@ -1490,7 +1546,18 @@ export default function TimelineEditor({
       </div>
 
       {/* ── Piano roll ── */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-zinc-950">
+      <div
+        ref={scrollRef}
+        onMouseDownCapture={startPan}
+        onClickCapture={(e) => {
+          if (!panClickGuardRef.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className={`min-h-0 flex-1 overflow-auto bg-zinc-950 ${
+          panning ? "[&_*]:!cursor-grabbing" : spaceHeld ? "[&_*]:!cursor-grab" : ""
+        }`}
+      >
         {/* Time ruler: sticks to the top while the roll scrolls vertically */}
         <div
           className="sticky top-0 z-50 cursor-col-resize select-none border-b border-zinc-800 bg-zinc-900"
