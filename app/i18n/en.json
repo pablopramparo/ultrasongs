@@ -129,6 +129,7 @@
   "editor.unmute": "Unmute (restores the volume)",
   "editor.mute": "Mute (keeps the volume)",
   "editor.selectedCount": "{n} selected",
+  "editor.noSelection": "Select a note to edit it",
   "editor.zoomVTitle": "Vertical zoom (row height)",
   "editor.follow": "Follow",
   "editor.followTitle": "Scroll the view along with the playhead while playing",

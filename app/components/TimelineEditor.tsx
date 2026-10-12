@@ -1684,14 +1684,16 @@ export default function TimelineEditor({
 
       {/* Fixed height: the note editor lives here, not in the toolbar, so selecting a note never shifts the roll */}
       <div className="flex h-12 items-center overflow-x-auto border-t border-zinc-800 bg-zinc-900 px-4 text-xs text-zinc-400">
-        {selectedNote ? (
-            <div className="flex items-center gap-1.5">
-              {selection.length > 1 && (
+        {/* Always there (disabled with nothing selected), so the bar never changes shape under the mouse */}
+        <fieldset disabled={!selectedNote} className={`flex shrink-0 items-center gap-1.5 ${selectedNote ? "" : "opacity-50"}`}>
+              {selection.length > 1 ? (
                 <span className="px-1 font-medium text-blue-300">{t("editor.selectedCount", { n: selection.length })}</span>
+              ) : (
+                !selectedNote && <span className="px-1">{t("editor.noSelection")}</span>
               )}
               <input
                 ref={syllableInputRef}
-                value={selectedNote.syllable}
+                value={selectedNote?.syllable ?? ""}
                 onFocus={() => { syllableEditedRef.current = false; }}
                 onChange={(e) => {
                   // One undo step per editing session of the field
@@ -1708,26 +1710,26 @@ export default function TimelineEditor({
               <button
                 onClick={() => {
                   const ids = new Set(selection);
-                  const next = !selectedNote.lineStart;
+                  const next = !selectedNote?.lineStart;
                   snapshot();
                   setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: next } : n)));
                 }}
                 title={t("editor.newPhraseTitle")}
-                aria-pressed={!!selectedNote.lineStart}
-                className={`${chip} ${selectedNote.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
+                aria-pressed={!!selectedNote?.lineStart}
+                className={`${chip} ${selectedNote?.lineStart ? "!border-violet-600 !bg-violet-950 !text-violet-200" : ""}`}
               >
                 ¶ {t("editor.newPhrase")}
               </button>
               <button
                 onClick={toggleBreakAfter}
                 title={t("editor.endPhraseTitle")}
-                aria-pressed={!!selectedNote.breakAfter}
-                className={`${chip} ${selectedNote.breakAfter ? "!border-amber-600 !bg-amber-950 !text-amber-200" : ""}`}
+                aria-pressed={!!selectedNote?.breakAfter}
+                className={`${chip} ${selectedNote?.breakAfter ? "!border-amber-600 !bg-amber-950 !text-amber-200" : ""}`}
               >
                 ⏎ {t("editor.endPhrase")}
               </button>
               <select
-                value={selectedNote.type}
+                value={selectedNote?.type ?? ":"}
                 onChange={(e) => {
                   const ids = new Set(selection);
                   const type = e.target.value as NoteType;
@@ -1753,10 +1755,8 @@ export default function TimelineEditor({
               >
                 {t("editor.delete")}
               </button>
-            </div>
-        ) : (
-          <span className="truncate">{t("editor.help")}</span>
-        )}
+        </fieldset>
+        <span className="ml-4 hidden min-w-0 truncate 2xl:block">{t("editor.help")}</span>
       </div>
 
       <audio

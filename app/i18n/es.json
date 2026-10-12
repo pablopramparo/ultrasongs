@@ -129,6 +129,7 @@
   "editor.unmute": "Activar (recupera el volumen)",
   "editor.mute": "Silenciar (conserva el volumen)",
   "editor.selectedCount": "{n} seleccionadas",
+  "editor.noSelection": "Seleccioná una nota para editarla",
   "editor.zoomVTitle": "Zoom vertical (alto de las filas)",
   "editor.follow": "Seguir",
   "editor.followTitle": "Desplazar la vista junto con el cursor mientras se reproduce",
