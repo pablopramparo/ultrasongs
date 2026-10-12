@@ -230,5 +230,6 @@
   "editor.newPhrase": "Nueva frase",
   "editor.newPhraseTitle": "Esta nota abre una frase nueva: se agrega un salto antes de ella (L)",
   "editor.videoShow": "Mostrar el video",
-  "editor.videoHide": "Ocultar el video"
+  "editor.videoHide": "Ocultar el video",
+  "editor.videoMoveTitle": "Arrastrá para moverlo · doble click para volver a su lugar"
 }

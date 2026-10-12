@@ -230,5 +230,6 @@
   "editor.newPhrase": "New phrase",
   "editor.newPhraseTitle": "This note opens a new phrase: a line break is added before it (L)",
   "editor.videoShow": "Show the video",
-  "editor.videoHide": "Hide the video"
+  "editor.videoHide": "Hide the video",
+  "editor.videoMoveTitle": "Drag to move · double-click to put it back"
 }

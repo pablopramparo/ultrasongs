@@ -19,6 +19,8 @@ const PX_SEC_MAX = 400;
 /** Pointer travel (px) before a press on the grid becomes a rubber-band selection. */
 const DRAG_THRESHOLD = 4;
 const HISTORY_LIMIT = 100;
+/** Default video thumbnail offsets: clear of the roll's horizontal scrollbar and the bottom bar. */
+const VIDEO_DEFAULT_POS = { right: 24, bottom: 76 };
 /** Hard limits of the pitch axis (MIDI). */
 const PITCH_MIN = 0;
 const PITCH_MAX = 127;
@@ -208,6 +210,44 @@ export default function TimelineEditor({
   const [showVideo, setShowVideo] = useState(() => {
     try { return sessionStorage.getItem("ultrasongs.editor.video") !== "0"; } catch { return true; }
   });
+  // The thumbnail floats over the roll and can be dragged elsewhere; double-click puts it back.
+  // Offsets are measured from the editor's bottom-right corner, above the scrollbar and bottom bar.
+  const [videoPos, setVideoPos] = useState<{ right: number; bottom: number }>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ultrasongs.editor.videoPos") ?? "null");
+      if (saved && Number.isFinite(saved.right) && Number.isFinite(saved.bottom)) return saved;
+    } catch { /* ignore */ }
+    return VIDEO_DEFAULT_POS;
+  });
+  const moveVideo = (pos: { right: number; bottom: number }) => {
+    setVideoPos(pos);
+    try { localStorage.setItem("ultrasongs.editor.videoPos", JSON.stringify(pos)); } catch { /* ignore */ }
+  };
+  const startVideoDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const box = e.currentTarget;
+    const area = box.parentElement?.getBoundingClientRect();
+    if (!area) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origin = videoPos;
+    let last = origin;
+    const onMove = (ev: MouseEvent) => {
+      // Stays inside the editor
+      const right = Math.max(0, Math.min(area.width - box.offsetWidth, origin.right - (ev.clientX - startX)));
+      const bottom = Math.max(0, Math.min(area.height - box.offsetHeight, origin.bottom - (ev.clientY - startY)));
+      last = { right, bottom };
+      setVideoPos(last);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      moveVideo(last);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
   const toggleVideo = () =>
     setShowVideo((v) => {
       const next = !v;
@@ -1630,11 +1670,15 @@ export default function TimelineEditor({
       {/* Video thumbnail, floating over the roll so it takes no layout space */}
       {videoUrl && (
         <div
-          className={`pointer-events-none absolute bottom-14 right-6 z-50 w-60 overflow-hidden rounded-lg border border-zinc-700 bg-black shadow-2xl shadow-black/60 ${
+          onMouseDown={startVideoDrag}
+          onDoubleClick={() => moveVideo(VIDEO_DEFAULT_POS)}
+          title={t("editor.videoMoveTitle")}
+          style={{ right: videoPos.right, bottom: videoPos.bottom, cursor: "grab" }}
+          className={`absolute z-50 w-60 select-none overflow-hidden rounded-lg border border-zinc-700 bg-black shadow-2xl shadow-black/60 ${
             showVideo ? "" : "hidden"
           }`}
         >
-          <video ref={videoRef} src={videoUrl} muted className="aspect-video w-full object-contain" />
+          <video ref={videoRef} src={videoUrl} muted className="pointer-events-none aspect-video w-full object-contain" />
         </div>
       )}
 
