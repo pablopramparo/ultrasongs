@@ -6,5 +6,11 @@
   "remote": {
     "urls": ["http://127.0.0.1:*"]
   },
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "allow-check-update",
+    "allow-install-update",
+    "allow-open-external"
+  ]
 }
