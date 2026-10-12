@@ -1,11 +1,11 @@
 {
-  "version": "0.3.5",
-  "notes": "Editor help, export feedback, confirmations, working download button, library links to drafts.",
-  "pub_date": "2026-10-12T21:28:58.856Z",
+  "version": "0.3.6",
+  "notes": "Export back to a song made elsewhere; license note.",
+  "pub_date": "2026-10-12T22:12:47.060Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0lsby9yc3cxcVdMRVcwWGp0N2tVU0lMclBKRUtDWE54TlhUQmxTU1U4UytrRExWMURoK0ZNRXZQZW8vNTB0SFIyekYvVzE1UEx4Y2JZbnNIak1HQlFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODQwNTM4CWZpbGU6VWx0cmFzb25nc18wLjMuNV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjUKZDR4Ky96WDVJRFljVkkyeTNRdkFJekJwZmlNNTRlUmRhbDJmQmR4R1lYNkxyUVRjbVB3WE44eWRJOU8zMUYrNjV0RUYrVktLUmxBUnExK3hROHprQ2c9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.5/Ultrasongs_0.3.5_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0JQNUdyV09hSk5INk5ORjhNckg3UzJOdTY5SitvWHByRGZCVUJ6MytnMW9ONWVPZHFaNGVLVFRoSVhtWUh6aU5DbVdNTXo0NU5PVW5KdmFmbTFZQkE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODQzMTY2CWZpbGU6VWx0cmFzb25nc18wLjMuNl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjYKbUsrckZhS3lsamdJYzJrQzFEL280cWpvb2RMVzZxbGMvV0tsRmZWRndYZ3pqNmorTmRSbUxWT3JUVVVSNFVPZHpKNUlVTnZBbXBTV21YUWJSYjkwQlE9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.6/Ultrasongs_0.3.6_x64-setup.exe"
     }
   }
 }
