@@ -1,10 +1,15 @@
+import { readFileSync } from "fs";
 import type { NextConfig } from "next";
+
+// Shown in Settings; package.json is the single source of truth (the release flow bumps it).
+const { version } = JSON.parse(readFileSync("./package.json", "utf8")) as { version: string };
 
 // Packaging builds (Tauri sidecar) set NEXT_OUTPUT=standalone to get a self-contained server.
 // It is opt-in because `next start` (start.bat) does not work with standalone output.
 const standalone = process.env.NEXT_OUTPUT === "standalone";
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_APP_VERSION: version },
   serverExternalPackages: ["fluent-ffmpeg", "@ffmpeg-installer/ffmpeg", "hyphen", "music-tempo"],
   ...(standalone
     ? {

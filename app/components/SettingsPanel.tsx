@@ -2,6 +2,7 @@
 
 import { useI18n } from "@/app/i18n/I18nProvider";
 import { LANGUAGES } from "@/app/i18n";
+import AboutPanel from "./AboutPanel";
 import SongsFolderSetting from "./SongsFolderSetting";
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onSongsFolderChanged: () => void;
 }
 
-/** Application settings: interface language and the Ultrastar songs folder. */
+/** Application settings: interface language, the Ultrastar songs folder, and version / credits. */
 export default function SettingsPanel({ onBack, onSongsFolderChanged }: Props) {
   const { t, lang, setLang } = useI18n();
 
@@ -59,6 +60,9 @@ export default function SettingsPanel({ onBack, onSongsFolderChanged }: Props) {
       <div className="card p-5">
         <SongsFolderSetting onChanged={onSongsFolderChanged} />
       </div>
+
+      {/* Version, updates and credits */}
+      <AboutPanel />
     </section>
   );
 }

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, RunEvent, Url};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const BOOT_TIMEOUT: Duration = Duration::from_secs(90);
@@ -128,6 +128,78 @@ fn start_server(resources: &Path, data: &Path, port: u16) -> std::io::Result<Chi
     Ok(child)
 }
 
+/// Stops the server (and the Python service under it): the installer replaces files they may hold open.
+fn stop_server(app: &AppHandle) {
+    if let Some(server) = app.try_state::<Server>() {
+        if let Some(child) = server.0.lock().unwrap().as_mut() {
+            kill_tree(child);
+        }
+    }
+}
+
+/// Downloads `update`, stops the server and runs the installer; the app then restarts.
+async fn install_and_restart(
+    app: &AppHandle,
+    update: Update,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let bytes = update.download(|_, _| {}, || {}).await?;
+    stop_server(app);
+    update.install(bytes)?;
+    app.restart();
+}
+
+/// Settings screen: is a newer version published? Returns `{ available, version?, current }`.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<serde_json::Value, String> {
+    let current = app.package_info().version.to_string();
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(match update {
+        Some(u) => serde_json::json!({ "available": true, "version": u.version, "current": current }),
+        None => serde_json::json!({ "available": false, "current": current }),
+    })
+}
+
+/// Settings screen: install the newer version (the app restarts when it is done).
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+    match update {
+        Some(update) => install_and_restart(&app, update).await.map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+/// Opens a link in the default browser. Only a short list of hosts the credits point at is allowed,
+/// since the webview shows a local web app and must not be able to launch arbitrary URLs.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let parsed: Url = url.parse().map_err(|_| "invalid url".to_string())?;
+    let allowed = parsed.scheme() == "https"
+        && matches!(
+            parsed.host_str().unwrap_or(""),
+            "github.com" | "www.github.com" | "ultrastar-es.org" | "www.ultrastar-es.org"
+        );
+    if !allowed {
+        return Err("url not allowed".into());
+    }
+    Command::new("explorer.exe")
+        .arg(parsed.as_str())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Looks for a newer release (manifest: `latest.json` in the repository) and, if the user agrees,
 /// downloads it, stops the server and runs the installer. Any failure is silent: being offline or
 /// GitHub being down must never get in the way of using the app.
@@ -156,21 +228,14 @@ async fn update_if_available(app: AppHandle) -> Result<(), Box<dyn std::error::E
     if !accepted {
         return Ok(());
     }
-    let bytes = update.download(|_, _| {}, || {}).await?;
-    // The installer replaces files the server (and the Python service) may be holding open.
-    if let Some(server) = app.try_state::<Server>() {
-        if let Some(child) = server.0.lock().unwrap().as_mut() {
-            kill_tree(child);
-        }
-    }
-    update.install(bytes)?;
-    app.restart();
+    install_and_restart(&app, update).await.map_err(|e| e as Box<dyn std::error::Error>)
 }
 
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![check_update, install_update, open_external])
         .setup(|app| {
             let resources = plain(app.path().resource_dir()?);
             // Not the install folder (%LOCALAPPDATA%\Ultrasongs): uninstalling must not wipe models and drafts.
