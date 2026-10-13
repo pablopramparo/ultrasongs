@@ -10,7 +10,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, RunEvent, Url};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Url};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
@@ -137,14 +137,54 @@ fn stop_server(app: &AppHandle) {
     }
 }
 
+/// Tells the web UI how the update is going (`UpdateProgress` listens): `phase` is "downloading",
+/// "installing" or "error"; `total` is unknown when the server sends no Content-Length.
+fn emit_update(app: &AppHandle, phase: &str, downloaded: u64, total: Option<u64>) {
+    let _ = app.emit(
+        "update-progress",
+        serde_json::json!({ "phase": phase, "downloaded": downloaded, "total": total }),
+    );
+}
+
 /// Downloads `update`, stops the server and runs the installer; the app then restarts.
 async fn install_and_restart(
     app: &AppHandle,
     update: Update,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let bytes = update.download(|_, _| {}, || {}).await?;
+    emit_update(app, "downloading", 0, None);
+    let mut downloaded: u64 = 0;
+    let mut last_step: u64 = u64::MAX;
+    let progress_app = app.clone();
+    let result = update
+        .download(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                // About 100 events for the whole download, not one per network chunk
+                let step = total.map_or(downloaded / (256 * 1024), |t| downloaded * 100 / t.max(1));
+                if step != last_step {
+                    last_step = step;
+                    emit_update(&progress_app, "downloading", downloaded, total);
+                }
+            },
+            || {},
+        )
+        .await;
+    let bytes = match result {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            emit_update(app, "error", 0, None);
+            return Err(e.into());
+        }
+    };
+    emit_update(app, "installing", 0, None);
     stop_server(app);
-    update.install(bytes)?;
+    // The installer replaces files and the app exits right after launching it; a moment lets the
+    // "installing" notice reach the screen instead of the window just vanishing.
+    std::thread::sleep(Duration::from_millis(800));
+    if let Err(e) = update.install(bytes) {
+        emit_update(app, "error", 0, None);
+        return Err(e.into());
+    }
     app.restart();
 }
 
@@ -279,7 +319,17 @@ async fn update_if_available(app: AppHandle) -> Result<(), Box<dyn std::error::E
     if !accepted {
         return Ok(());
     }
-    install_and_restart(&app, update).await.map_err(|e| e as Box<dyn std::error::Error>)
+    if let Err(e) = install_and_restart(&app, update).await {
+        // The user said yes and then nothing happened: say so instead of failing silently
+        app.dialog()
+            .message(format!(
+                "No se pudo instalar la actualización. Intentá de nuevo más tarde.\n\
+                 The update could not be installed. Please try again later.\n\n{e}"
+            ))
+            .title("Ultrasongs")
+            .blocking_show();
+    }
+    Ok(())
 }
 
 fn main() {
