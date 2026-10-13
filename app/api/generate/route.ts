@@ -88,6 +88,8 @@ export async function POST(request: NextRequest) {
       const firstSyl = aligned.find((s) => !s.isLineBreak && s.start > 0);
       gap = firstSyl ? Math.max(0, firstSyl.start * 1000 - 500) : 0;
       let prevEnd = -1;
+      // True right after a "-": the next note must start after the marker, not on it
+      let afterBreak = false;
 
       for (const syl of aligned) {
         if (syl.isLineBreak) {
@@ -111,12 +113,15 @@ export async function POST(request: NextRequest) {
           // Keep prevEnd at lineBreakBeat so the first note of the next phrase
           // never starts before the line break marker.
           prevEnd = lineBreakBeat;
+          afterBreak = true;
           continue;
         }
         const startBeat = msToBeats(syl.start * 1000, bpm, gap);
         const duration = Math.max(1, msToBeats(syl.end * 1000, bpm, gap) - startBeat);
-        const adjStart = prevEnd >= 0 ? Math.max(startBeat, prevEnd + 1) : startBeat;
+        // Notes may touch (start = previous end); they never overlap.
+        const adjStart = prevEnd >= 0 ? Math.max(startBeat, afterBreak ? prevEnd + 1 : prevEnd) : startBeat;
         ultraNotes.push({ type: ":", startBeat: adjStart, duration, pitch: syl.midi, syllable: syl.syllable });
+        afterBreak = false;
         prevEnd = adjStart + duration;
       }
     }

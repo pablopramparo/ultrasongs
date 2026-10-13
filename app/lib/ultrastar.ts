@@ -47,6 +47,8 @@ export function editorNotesToUltrastar(
   const out: UltrastarNote[] = [];
   let prevEnd = -1;
   let prevBreakAfter = false;
+  // True right after a "-": the next note must start after the marker, not on it
+  let afterBreak = false;
   for (const en of marked) {
     const startBeat = msToBeats(en.startSec * 1000, bpm, gap);
     const endBeat = msToBeats((en.startSec + en.durationSec) * 1000, bpm, gap);
@@ -66,10 +68,13 @@ export function editorNotesToUltrastar(
       }
       out.push({ type: "-", startBeat: breakBeat, duration: 0, pitch: 0, syllable: "" });
       prevEnd = breakBeat;
+      afterBreak = true;
     }
 
-    const adjStart = prevEnd >= 0 ? Math.max(startBeat, prevEnd + 1) : startBeat;
+    // Notes may touch (start = previous end); they never overlap.
+    const adjStart = prevEnd >= 0 ? Math.max(startBeat, afterBreak ? prevEnd + 1 : prevEnd) : startBeat;
     out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
+    afterBreak = false;
     prevEnd = adjStart + duration;
     prevBreakAfter = !!en.breakAfter;
   }
