@@ -2,7 +2,7 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import MusicTempo from "music-tempo";
 import { existsSync } from "fs";
-import { hasLineMarks, inferLineStarts, LINE_BREAK_GAP_SEC, type EditorNote, type NoteType } from "./editorNote";
+import { detachBreakMarks, hasLineMarks, inferLineStarts, LINE_BREAK_GAP_SEC, type EditorNote, type NoteType } from "./editorNote";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -34,7 +34,7 @@ export function msToBeats(ms: number, bpm: number, gap: number): number {
 
 /**
  * Converts timeline-editor notes (seconds) to Ultrastar notes (beats), keeping notes from
- * overlapping. A "-" line goes before every note flagged `lineStart` (or following one flagged `breakAfter`); notes that carry no phrase
+ * overlapping. A "-" line goes before every note flagged `lineStart` ; notes that carry no phrase
  * information get phrases inferred from pauses of `breakGapSec` or more.
  */
 export function editorNotesToUltrastar(
@@ -43,10 +43,10 @@ export function editorNotesToUltrastar(
   gap: number,
   breakGapSec = LINE_BREAK_GAP_SEC
 ): UltrastarNote[] {
-  const marked = hasLineMarks(notes) ? notes : inferLineStarts(notes, breakGapSec);
+  const plain = detachBreakMarks(notes);
+  const marked = hasLineMarks(plain) ? plain : inferLineStarts(plain, breakGapSec);
   const out: UltrastarNote[] = [];
   let prevEnd = -1;
-  let prevBreakAfter = false;
   // True right after a "-": the next note must start after the marker, not on it
   let afterBreak = false;
   for (const en of marked) {
@@ -54,17 +54,16 @@ export function editorNotesToUltrastar(
     const endBeat = msToBeats((en.startSec + en.durationSec) * 1000, bpm, gap);
     const duration = Math.max(1, endBeat - startBeat);
 
-    if (prevEnd >= 0 && (en.lineStart || prevBreakAfter)) {
+    if (prevEnd >= 0 && en.lineStart) {
       // A marker with its own position is written where it is, held inside the gap between notes.
       // Otherwise the same placement as the auto mode: 4 beats before the next note, never before the
-      // last one ends; a note marked `breakAfter` (instrumental follows) closes its phrase right
-      // where it ends.
+      // last one ends.
       let breakBeat: number;
       if (en.breakSec !== undefined) {
         const wanted = msToBeats(en.breakSec * 1000, bpm, gap);
         breakBeat = Math.min(Math.max(prevEnd + 1, wanted), Math.max(prevEnd + 1, startBeat - 1));
       } else {
-        breakBeat = prevBreakAfter ? prevEnd + 1 : Math.max(prevEnd + 1, startBeat - 4);
+        breakBeat = Math.max(prevEnd + 1, startBeat - 4);
       }
       out.push({ type: "-", startBeat: breakBeat, duration: 0, pitch: 0, syllable: "" });
       prevEnd = breakBeat;
@@ -76,7 +75,6 @@ export function editorNotesToUltrastar(
     out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
     afterBreak = false;
     prevEnd = adjStart + duration;
-    prevBreakAfter = !!en.breakAfter;
   }
   return out;
 }

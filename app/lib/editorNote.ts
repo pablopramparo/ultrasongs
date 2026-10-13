@@ -17,10 +17,7 @@ export interface EditorNote {
    * had phrase information: see hasLineMarks / inferLineStarts.
    */
   lineStart?: boolean;
-  /**
-   * Last note of a phrase that is followed by an instrumental part: the line break is exported
-   * right after this note ends, instead of a few beats before the next phrase starts.
-   */
+  /** Legacy (old drafts): converted to a loose marker by detachBreakMarks. */
   breakAfter?: boolean;
   /**
    * Own position (seconds) of the "-" line that opens this phrase, independent of the note: moving
@@ -39,6 +36,32 @@ export function phraseBreakSec(sorted: EditorNote[], i: number): number {
   if (n.breakSec === undefined) return n.startSec;
   const prevEnd = i > 0 ? sorted[i - 1].startSec + sorted[i - 1].durationSec : 0;
   return Math.min(n.startSec, Math.max(prevEnd, n.breakSec));
+}
+
+/**
+ * Drafts saved while notes could carry their own phrase end (`breakAfter`) are converted to a loose
+ * marker: the next note opens a phrase and its marker sits right where the flagged note ends, so the
+ * export is the same and the marker can be dragged. A marker the next note already positioned wins.
+ */
+export function detachBreakMarks(notes: EditorNote[]): EditorNote[] {
+  if (!notes.some((n) => n.breakAfter !== undefined)) return notes;
+  const order = [...notes].sort((a, b) => a.startSec - b.startSec);
+  const next = new Map<string, EditorNote>();
+  order.forEach((n, i) => {
+    if (n.breakAfter && order[i + 1]) next.set(n.id, order[i + 1]);
+  });
+  const opens = new Map<string, number>();
+  for (const [id, nx] of next) {
+    const n = order.find((o) => o.id === id)!;
+    opens.set(nx.id, n.startSec + n.durationSec);
+  }
+  return notes.map((n) => {
+    const { breakAfter: _drop, ...rest } = n;
+    void _drop;
+    const end = opens.get(n.id);
+    if (end === undefined) return rest;
+    return { ...rest, lineStart: true, breakSec: n.breakSec ?? end };
+  });
 }
 
 /** Silence between two notes (seconds) from which a new phrase is assumed to start. */
