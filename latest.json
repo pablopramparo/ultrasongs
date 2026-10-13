@@ -1,11 +1,11 @@
 {
-  "version": "0.3.11",
-  "notes": "Update download shows progress; clear notice before the app closes to install; error dialog if the update fails.",
-  "pub_date": "2026-10-13T02:25:24.764Z",
+  "version": "0.3.12",
+  "notes": "Drafts saved before the word-spacing fix are repaired when opened or exported.",
+  "pub_date": "2026-10-13T02:43:28.553Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0tTTmEzK285OEFZL0pidGlMdGZWWGtKSlZ5UG8xTCs0VmxsbzQrK3RiUXZWY1hUeFQ2TzZ4cEZDQXB6MitkSUU3MHovbWpQTGZ1TjduQ2hMb2lCNHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU4MzI0CWZpbGU6VWx0cmFzb25nc18wLjMuMTFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMQpiV3l0ZjlzYWxUdElYVXlrQ0lGTEE0VUlJZlQ4Wk1hZm90WTZPUG0wSHZCekpzZFVDb25tVnVoNUNGWHJQTTZXRTZaS1kzSHVBMlpOR2xnRkM0OUhCQT09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.11/Ultrasongs_0.3.11_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0Frb0pLMWRBT2F2RmNWWHFteWNXdEFxVHRMRkdqdktDUG1ZQk5hNHV0WkdqNUZOS3BRV0FkUUJLTHRRdzRMb3RWekV0YVE4RE1xUU9YSlVyU2NWbUEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU5NDA4CWZpbGU6VWx0cmFzb25nc18wLjMuMTJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMgpQOExEU3pBQkNWUlFHWmhQbXBwZU9qMlBEaGZkbWw2OFd3YzNiMUhNMmRjYjRlaVp5b1FVVHFWR3J1N3M3OHNHc1lVYlAvNDFsWjVtYVhDS0s2RVNDQT09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.12/Ultrasongs_0.3.12_x64-setup.exe"
     }
   }
 }
