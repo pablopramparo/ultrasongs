@@ -1,11 +1,11 @@
 {
-  "version": "0.3.9",
-  "notes": "Phrase markers are now independent of notes: draggable in the editor, and imported songs keep each '-' at its exact beat.",
-  "pub_date": "2026-10-13T01:56:27.224Z",
+  "version": "0.3.10",
+  "notes": "Export keeps notes that touch each other as they were; only overlaps are pushed.",
+  "pub_date": "2026-10-13T02:06:31.130Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ1BLdzg2WkdlbFlSbG5mcjg5Q3g4T3pSYnlkTHl0T1FkcGMvWjczN0dteXFSRURYNXNGYUovYW1NQUxWdjNQSEd4bDh1UG16cTFZUUk5N3NwcGpCYVFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU2NTg2CWZpbGU6VWx0cmFzb25nc18wLjMuOV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjkKRHpwN2RKS0dKYVkvYWkrVXhLSWFnQkFnbkR5L1E5Nm83VXBSVTMxV1BLMjVzT2g3aTY5di82clhtOG4rL1VTUWhhRzJTaDhTcUxIdlg5UkZ3aHN4QXc9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.9/Ultrasongs_0.3.9_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0xZODhBN05CKzUwU2tnaFN1UkdvdDdVU2RaUklDSlRwVktGTWZBSjVPdEFUQk80NmpNWWpEdHRKU1VLUUltdGI5TGU2YnFNSkdkWjZ0Yk5GM1pFOGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU3MTkwCWZpbGU6VWx0cmFzb25nc18wLjMuMTBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMApENWI5c3ZESk8zTExjRlk0VnA4MlFsTnA2d0JaTmpTK0xyV2c5bzVmMXRORDh1YVJDWExsdmw5RmVMVjlVR2Y0YlUvSFV6SmpTK2FuVUdFbG84Uk1BZz09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.10/Ultrasongs_0.3.10_x64-setup.exe"
     }
   }
 }
