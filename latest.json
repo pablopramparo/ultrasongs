@@ -1,11 +1,11 @@
 {
-  "version": "0.3.8",
-  "notes": "Fix: words glued together in Ultrastar. Song cover from the mp3's embedded art, replaceable.",
-  "pub_date": "2026-10-13T01:42:37.594Z",
+  "version": "0.3.9",
+  "notes": "Phrase markers are now independent of notes: draggable in the editor, and imported songs keep each '-' at its exact beat.",
+  "pub_date": "2026-10-13T01:56:27.224Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ1A1Y2JLY0NoL2V2WVduQ2xTNGtpQ29wdXZPeEhCR1hBeW9yRlMwQmMyT0ptTjZVaUdjbVh1bEF3VDMwRVNFN3JTZHJNRmI4QTd3WUtYRWR3OTltc2dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU1NzU3CWZpbGU6VWx0cmFzb25nc18wLjMuOF94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjgKblFRSm9VMzRQUEdYTmZ3SzkvNGhJZG0rMmppMTZvYkF0a1ZGNGt2a0ZEV284bC9tT0cxVkFjVlByblZrOSsvbWtZZlFuT1pIaXBoWTZ1blB1OW1QRFE9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.8/Ultrasongs_0.3.8_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ1BLdzg2WkdlbFlSbG5mcjg5Q3g4T3pSYnlkTHl0T1FkcGMvWjczN0dteXFSRURYNXNGYUovYW1NQUxWdjNQSEd4bDh1UG16cTFZUUk5N3NwcGpCYVFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU2NTg2CWZpbGU6VWx0cmFzb25nc18wLjMuOV94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjkKRHpwN2RKS0dKYVkvYWkrVXhLSWFnQkFnbkR5L1E5Nm83VXBSVTMxV1BLMjVzT2g3aTY5di82clhtOG4rL1VTUWhhRzJTaDhTcUxIdlg5UkZ3aHN4QXc9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.9/Ultrasongs_0.3.9_x64-setup.exe"
     }
   }
 }
