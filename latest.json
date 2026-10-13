@@ -1,11 +1,11 @@
 {
-  "version": "0.3.13",
-  "notes": "Re-exporting a song keeps its cover and its #COVER tag.",
-  "pub_date": "2026-10-13T02:55:09.697Z",
+  "version": "0.3.14",
+  "notes": "Drafts take the cover already in the song folder; removed the risky 'save all to Songs' button.",
+  "pub_date": "2026-10-13T03:50:31.342Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0llbWVFd0p6S1VsaERyTHl6RmlXNmR4K2owUTdhQzc4ZFRqQTRjTGhySG5QRVpKaUlmcTUydTA4dzlDMmpvK2NFWko2V0ZZNHNiVk1IaDVybUs2Snc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODYwMTA5CWZpbGU6VWx0cmFzb25nc18wLjMuMTNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMwpRQ2daTGM2bXFMTkd3ekFSRGhCYXlMdW9zaFMwMFFnS3lnc3RUOW9aUEZmWjAveCtrRDc0QWlocjJyODg3cTRpTTJqNGNtQ2xiWW02MjMyMEFYQk5Ddz09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.13/Ultrasongs_0.3.13_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ09VSS8wOXFsZ0hQUWpBdmRMU0tGd3JXaDYzRWxjM0dUWkdaRFBUUlBMMXRJS2NpSTJ0c2UyYlo0MnZLSStIdFE2K3kvdlkwMjZ5VGNVbkYwbVpSSEFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODYzNDMxCWZpbGU6VWx0cmFzb25nc18wLjMuMTRfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xNApjUG5vekFETzZLdmlpUG03eUwzKzc2Z3hrdjhNeU1pT2F2V2tKTzROK1ZXWVJsaVZGckN0VFpkSzc1M0k5SERpQlJId1crSlhzK2pBdFVIT1hETGZDQT09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.14/Ultrasongs_0.3.14_x64-setup.exe"
     }
   }
 }
