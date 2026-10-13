@@ -1,11 +1,11 @@
 {
-  "version": "0.3.7",
-  "notes": "Hand tool, Home button, library refresh, editor tips.",
-  "pub_date": "2026-10-12T22:48:05.619Z",
+  "version": "0.3.8",
+  "notes": "Fix: words glued together in Ultrastar. Song cover from the mp3's embedded art, replaceable.",
+  "pub_date": "2026-10-13T01:42:37.594Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0NUbDdPRTJVdi8zZUNHU1pYMklGZ1J2L20wWSt2OTh6SnZKU2EvZi92YjNCQm5pUTkwWGVMTmYyUXV1UUYyU2l5VjJQaWthUEluakduK1BOaG1pQVF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODQ1Mjg1CWZpbGU6VWx0cmFzb25nc18wLjMuN194NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjcKejZTRVFJVk5NeVFkdEdJbHFqSjA1c0l1eXdyNTRWTjFUb2lzdERUUnlsM0E4WUVaOWNFSEFTY2s3VTBuNCtJaVJzVDRWYUJCejFaY1NDWHo5MUZEQ1E9PQo=",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.7/Ultrasongs_0.3.7_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ1A1Y2JLY0NoL2V2WVduQ2xTNGtpQ29wdXZPeEhCR1hBeW9yRlMwQmMyT0ptTjZVaUdjbVh1bEF3VDMwRVNFN3JTZHJNRmI4QTd3WUtYRWR3OTltc2dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU1NzU3CWZpbGU6VWx0cmFzb25nc18wLjMuOF94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4zLjgKblFRSm9VMzRQUEdYTmZ3SzkvNGhJZG0rMmppMTZvYkF0a1ZGNGt2a0ZEV284bC9tT0cxVkFjVlByblZrOSsvbWtZZlFuT1pIaXBoWTZ1blB1OW1QRFE9PQo=",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.8/Ultrasongs_0.3.8_x64-setup.exe"
     }
   }
 }
