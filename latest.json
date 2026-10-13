@@ -1,11 +1,11 @@
 {
-  "version": "0.3.14",
-  "notes": "Drafts take the cover already in the song folder; removed the risky 'save all to Songs' button.",
-  "pub_date": "2026-10-13T03:50:31.342Z",
+  "version": "0.3.15",
+  "notes": "Ultrasongs 0.3.15",
+  "pub_date": "2026-10-13T15:04:50.641Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ09VSS8wOXFsZ0hQUWpBdmRMU0tGd3JXaDYzRWxjM0dUWkdaRFBUUlBMMXRJS2NpSTJ0c2UyYlo0MnZLSStIdFE2K3kvdlkwMjZ5VGNVbkYwbVpSSEFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODYzNDMxCWZpbGU6VWx0cmFzb25nc18wLjMuMTRfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xNApjUG5vekFETzZLdmlpUG03eUwzKzc2Z3hrdjhNeU1pT2F2V2tKTzROK1ZXWVJsaVZGckN0VFpkSzc1M0k5SERpQlJId1crSlhzK2pBdFVIT1hETGZDQT09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.14/Ultrasongs_0.3.14_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ01iMzcvT3hmNTE1dWtXUzdjTDFFdHFTVTFnWEVjM01DVkQ1bVJNUzYySzZlWWZWK21reVgzcVhxcThzNm1mazFUbDBPYUx0WWNZOHBxZEdPeW9qOXcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxOTAzODkwCWZpbGU6VWx0cmFzb25nc18wLjMuMTVfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xNQo4bzNObXYyVE11UmI4cE96cnNuNS9hSXZKalAzek0yOUhXclpXUlNrRUc5L0ZjNUlQenZJWjZIZ0xodXBqQURJSGtMNEdiMWFJUnVzT2Njelc4YTdCUT09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.15/Ultrasongs_0.3.15_x64-setup.exe"
     }
   }
 }
