@@ -1,11 +1,11 @@
 {
-  "version": "0.3.10",
-  "notes": "Export keeps notes that touch each other as they were; only overlaps are pushed.",
-  "pub_date": "2026-10-13T02:06:31.130Z",
+  "version": "0.3.11",
+  "notes": "Update download shows progress; clear notice before the app closes to install; error dialog if the update fails.",
+  "pub_date": "2026-10-13T02:25:24.764Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0xZODhBN05CKzUwU2tnaFN1UkdvdDdVU2RaUklDSlRwVktGTWZBSjVPdEFUQk80NmpNWWpEdHRKU1VLUUltdGI5TGU2YnFNSkdkWjZ0Yk5GM1pFOGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU3MTkwCWZpbGU6VWx0cmFzb25nc18wLjMuMTBfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMApENWI5c3ZESk8zTExjRlk0VnA4MlFsTnA2d0JaTmpTK0xyV2c5bzVmMXRORDh1YVJDWExsdmw5RmVMVjlVR2Y0YlUvSFV6SmpTK2FuVUdFbG84Uk1BZz09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.10/Ultrasongs_0.3.10_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0tTTmEzK285OEFZL0pidGlMdGZWWGtKSlZ5UG8xTCs0VmxsbzQrK3RiUXZWY1hUeFQ2TzZ4cEZDQXB6MitkSUU3MHovbWpQTGZ1TjduQ2hMb2lCNHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU4MzI0CWZpbGU6VWx0cmFzb25nc18wLjMuMTFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMQpiV3l0ZjlzYWxUdElYVXlrQ0lGTEE0VUlJZlQ4Wk1hZm90WTZPUG0wSHZCekpzZFVDb25tVnVoNUNGWHJQTTZXRTZaS1kzSHVBMlpOR2xnRkM0OUhCQT09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.11/Ultrasongs_0.3.11_x64-setup.exe"
     }
   }
 }
