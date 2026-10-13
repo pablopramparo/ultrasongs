@@ -3,6 +3,7 @@ import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import { coverPathFor } from "@/app/lib/ffmpeg";
 import JSZip from "jszip";
 import { alignLyrics } from "@/app/lib/align";
 import { msToBeats, buildUltrastarTxt, detectBpm, editorNotesToUltrastar } from "@/app/lib/ultrastar";
@@ -125,11 +126,14 @@ export async function POST(request: NextRequest) {
     const accompanimentPath = resolveAllowed(body.accompanimentPath) ?? undefined;
     const mp3Filename = path.basename(mp3);
     const videoFilename = videoPath ? path.basename(videoPath) : undefined;
-    const txt = buildUltrastarTxt(ultraNotes, { title, artist, mp3: mp3Filename, bpm, gap, video: videoFilename });
+    const coverSrc = coverPathFor(mp3);
+    const coverFilename = existsSync(coverSrc) ? path.basename(coverSrc) : undefined;
+    const txt = buildUltrastarTxt(ultraNotes, { title, artist, mp3: mp3Filename, bpm, gap, video: videoFilename, cover: coverFilename });
 
     const zip = new JSZip();
     zip.file(`${title}.txt`, txt);
     zip.file(mp3Filename, await readFile(mp3));
+    if (coverFilename) zip.file(coverFilename, await readFile(coverSrc));
     if (videoPath && existsSync(videoPath)) {
       zip.file(videoFilename!, await readFile(videoPath));
     }

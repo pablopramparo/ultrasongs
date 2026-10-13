@@ -21,6 +21,7 @@ export interface UltrastarMeta {
   bpm: number;
   gap: number;
   video?: string;
+  cover?: string;
 }
 
 /**
@@ -72,6 +73,7 @@ export function buildUltrastarTxt(notes: UltrastarNote[], meta: UltrastarMeta): 
     `#TITLE:${meta.title}`,
     `#ARTIST:${meta.artist}`,
     `#MP3:${meta.mp3}`,
+    ...(meta.cover ? [`#COVER:${meta.cover}`] : []),
     ...(meta.video ? [`#VIDEO:${meta.video}`] : []),
     `#BPM:${meta.bpm.toFixed(2)}`,
     `#GAP:${Math.round(meta.gap)}`,

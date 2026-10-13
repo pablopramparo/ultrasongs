@@ -3,6 +3,7 @@ import { copyFile, mkdir, readdir, readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { buildUltrastarTxt, type UltrastarMeta, type UltrastarNote } from "./ultrastar";
 import { isInside } from "./safePath";
+import { coverPathFor } from "./ffmpeg";
 import { AppError } from "@/app/lib/appError";
 import { linkDraft, linkedFolder } from "./draftLink";
 
@@ -147,7 +148,9 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
 
   const mp3Name = `${base}.mp3`;
   const videoName = videoPath ? `${base}${path.extname(videoPath) || ".mp4"}` : undefined;
-  const meta: UltrastarMeta = { title, artist, mp3: mp3Name, bpm, gap, video: videoName };
+  const coverSrc = coverPathFor(mp3Path);
+  const coverName = existsSync(coverSrc) ? `${base}.jpg` : undefined;
+  const meta: UltrastarMeta = { title, artist, mp3: mp3Name, bpm, gap, video: videoName, cover: coverName };
 
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, MARKER), "", "utf8");
@@ -155,6 +158,7 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   await writeFile(path.join(dir, `${base}.txt`), txt, "utf8");
   await copyFile(mp3Path, path.join(dir, mp3Name));
   if (videoPath && videoName) await copyFile(videoPath, path.join(dir, videoName));
+  if (coverName) await copyFile(coverSrc, path.join(dir, coverName));
   if (draftId) await linkDraft(draftId, base, txt);
   return dir;
 }

@@ -412,7 +412,7 @@ export function alignLyrics(
   for (let li = 0; li < lines.length; li++) {
     const lineWords = lines[li].split(/\s+/).filter(Boolean);
 
-    for (const word of lineWords) {
+    for (const [wi, word] of lineWords.entries()) {
       const ts = interpolated[wordIdx++];
       const syllables = splitWord(word, lang);
       // Longer syllables (more letters) get proportionally more of the word's time,
@@ -427,7 +427,9 @@ export function alignLyrics(
         offset += weights[si];
         const end = ts.start + (offset / totalWeight) * wordDuration;
         output.push({
-          syllable: syl,
+          // UltraStar convention: a leading space marks the start of a new word within a line;
+          // without it the game renders the whole line glued together.
+          syllable: si === 0 && wi > 0 ? ` ${syl}` : syl,
           start,
           end,
           midi: midiForRange(ts, start, end),

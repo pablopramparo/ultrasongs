@@ -4,6 +4,7 @@ import { readdir, readFile, writeFile, mkdir, copyFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import crypto from "crypto";
+import { coverPathFor } from "@/app/lib/ffmpeg";
 import { DRAFTS_DIR, draftDir, resolveAllowed } from "@/app/lib/safePath";
 
 async function ensureDraftsDir() {
@@ -63,7 +64,12 @@ export async function POST(request: NextRequest) {
     };
 
     const audioFilename = "audio.mp3";
-    if (mp3Src && existsSync(mp3Src)) await copyInto(mp3Src, audioFilename);
+    if (mp3Src && existsSync(mp3Src)) {
+      await copyInto(mp3Src, audioFilename);
+      // The cover lives next to the mp3 (see coverPathFor)
+      const coverSrc = coverPathFor(mp3Src);
+      if (existsSync(coverSrc)) await copyInto(coverSrc, coverPathFor(audioFilename));
+    }
 
     let videoFilename: string | undefined;
     if (videoSrc && existsSync(videoSrc)) {

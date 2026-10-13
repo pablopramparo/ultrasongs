@@ -10,6 +10,7 @@ import { useI18n } from "./i18n/I18nProvider";
 import type { MessageKey } from "./i18n";
 import type { YoutubeResult } from "./components/YoutubeInput";
 import LyricsInput from "./components/LyricsInput";
+import CoverPicker from "./components/CoverPicker";
 import GenerateButton from "./components/GenerateButton";
 import DownloadPanel from "./components/DownloadPanel";
 import TimelineEditor from "./components/TimelineEditor";
@@ -41,6 +42,9 @@ export default function Home() {
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
   const [filename, setFilename] = useState("");
   const [videoFilename, setVideoFilename] = useState("");
+  // Cover picked before the audio is on the server; sent along with the upload.
+  const [pendingCoverFile, setPendingCoverFile] = useState<File | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -188,6 +192,8 @@ export default function Home() {
     };
 
     setAudioUrl(`/api/audio?mp3=${encodeURIComponent(draft.mp3)}`);
+    setPendingCoverFile(null);
+    setCoverUrl(`/api/cover?mp3=${encodeURIComponent(draft.mp3)}&v=${Date.now()}`);
     setVideoUrl(draft.videoPath ? `/api/video?path=${encodeURIComponent(draft.videoPath)}` : null);
 
     const ar: AlignResult = { notes: draft.notes, bpm: draft.bpm, gap: draft.gap };
@@ -226,6 +232,8 @@ export default function Home() {
   // ── File selection ───────────────────────────────────────────────────────
   const handleFile = useCallback((file: File) => {
     setPendingAudioFile(file);
+    setPendingCoverFile(null);
+    setCoverUrl(null);
     setFilename(file.name);
     uploadRef.current = null;
     transcribeRef.current = null;
@@ -245,6 +253,25 @@ export default function Home() {
     setVideoFilename(file.name);
   }, []);
 
+  // Before the audio is uploaded the image waits in the browser; afterwards it replaces the file on the server.
+  const handleCoverFile = useCallback(async (file: File) => {
+    const up = uploadRef.current;
+    if (!up) {
+      setPendingCoverFile(file);
+      setCoverUrl(URL.createObjectURL(file));
+      return;
+    }
+    const fd = new FormData();
+    fd.append("mp3", up.mp3);
+    fd.append("file", file);
+    const res = await fetch("/api/cover", { method: "POST", body: fd });
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({ message: t("cover.failed") }))).message);
+      return;
+    }
+    setCoverUrl(`/api/cover?mp3=${encodeURIComponent(up.mp3)}&v=${Date.now()}`);
+  }, [t]);
+
   // Audio + video already on the server (downloaded from YouTube): no upload step needed.
   const handleYoutube = useCallback((r: YoutubeResult) => {
     setPendingAudioFile(null);
@@ -252,6 +279,8 @@ export default function Home() {
     setFilename(r.title || "YouTube");
     setVideoFilename(r.title || "YouTube");
     uploadRef.current = { id: r.id, mp3: r.mp3, videoPath: r.videoPath };
+    setPendingCoverFile(null);
+    setCoverUrl(null);
     transcribeRef.current = null;
     setHasUploadedAudio(true);
     setTranscribed(false);
@@ -287,10 +316,14 @@ export default function Home() {
         const fd = new FormData();
         fd.append("file", pendingAudioFile);
         if (pendingVideoFile) fd.append("video", pendingVideoFile);
+        if (pendingCoverFile) fd.append("cover", pendingCoverFile);
         const upRes = await fetch("/api/upload", { method: "POST", body: fd });
         if (!upRes.ok) throw new Error((await upRes.json()).message);
         uploadRef.current = await upRes.json();
         setHasUploadedAudio(true);
+        // Embedded art (or the picked image) now lives next to the mp3 on the server
+        setPendingCoverFile(null);
+        setCoverUrl(`/api/cover?mp3=${encodeURIComponent(uploadRef.current!.mp3)}&v=${Date.now()}`);
       }
 
       // 2 — transcribe via SSE stream
@@ -395,7 +428,7 @@ export default function Home() {
       setError(err instanceof Error ? err.message : t("error.processFailed"));
       setPhase("error");
     }
-  }, [pendingAudioFile, pendingVideoFile, lyrics, currentDraftId, persistDraft, t]);
+  }, [pendingAudioFile, pendingVideoFile, pendingCoverFile, lyrics, currentDraftId, persistDraft, t]);
 
   // ── Quick generate ───────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -642,6 +675,8 @@ export default function Home() {
             />
           </div>
 
+          <CoverPicker coverUrl={coverUrl} onFile={handleCoverFile} disabled={busy} />
+
           <div className="flex flex-col gap-2">
             <h3 className="section-label">{t("section.infoLyrics")}</h3>
             <LyricsInput
@@ -741,6 +776,8 @@ export default function Home() {
                 videoFilename={videoFilename || undefined}
               />
             </div>
+
+            <CoverPicker coverUrl={coverUrl} onFile={handleCoverFile} disabled={busy} />
 
             <div className="flex flex-col gap-2">
               <h3 className="section-label">{t("section.infoLyrics")}</h3>

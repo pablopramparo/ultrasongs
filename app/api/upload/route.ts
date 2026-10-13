@@ -4,10 +4,11 @@ import { writeFile, mkdir, readFile, unlink } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import crypto from "crypto";
-import { isSupportedFile, isVideoFile, extractAudio } from "@/app/lib/ffmpeg";
+import { isSupportedFile, isVideoFile, extractAudio, extractCover, coverPathFor } from "@/app/lib/ffmpeg";
+
+const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
 const TMP_DIR = path.resolve(process.env.TMP_DIR ?? "./tmp");
-
 async function ensureTmpDir() {
   if (!existsSync(TMP_DIR)) {
     await mkdir(TMP_DIR, { recursive: true });
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file");
     const videoFile = formData.get("video");
+    const coverFile = formData.get("cover");
 
     if ((!file || typeof file === "string") && (!videoFile || typeof videoFile === "string")) {
       return apiError("api.noFile", 400);
@@ -62,6 +64,18 @@ export async function POST(request: NextRequest) {
       await writeFile(videoPath, await readFile(rawPath));
     }
 
+    // Album art embedded in an audio file. The original is deleted below, so this is the last
+    // chance to read it. (In a video file the first video stream is the picture, not a cover.)
+    if (!isVideoFile(file.name)) await extractCover(rawPath, coverPathFor(mp3Path));
+
+    // A cover the user picked wins over the embedded one
+    if (coverFile && typeof coverFile !== "string" && IMAGE_EXTS.has(path.extname(coverFile.name).toLowerCase())) {
+      const coverRaw = path.join(TMP_DIR, `${id}-cover${path.extname(coverFile.name).toLowerCase()}`);
+      await writeFile(coverRaw, Buffer.from(await coverFile.arrayBuffer()));
+      await extractCover(coverRaw, coverPathFor(mp3Path));
+      await unlink(coverRaw).catch(() => null);
+    }
+
     await unlink(rawPath);
     rawPath = null;
 
@@ -71,7 +85,6 @@ export async function POST(request: NextRequest) {
       videoPath = path.join(TMP_DIR, `${id}-video${videoExt}`);
       await writeFile(videoPath, Buffer.from(await videoFile.arrayBuffer()));
     }
-
     return NextResponse.json({ id, mp3: mp3Path, ...(videoPath ? { videoPath } : {}) });
   } catch (err) {
     if (rawPath) await unlink(rawPath).catch(() => null);
