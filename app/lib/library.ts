@@ -7,7 +7,7 @@ import type { EditorNote } from "./editorNote";
 import { DRAFTS_DIR, isInside } from "./safePath";
 import { getSongsDir } from "./settings";
 import { hashSongText, readDraftLinks, releaseFolder } from "./draftLink";
-import { extractAudio } from "./ffmpeg";
+import { coverPathFor, extractAudio, extractCover } from "./ffmpeg";
 import { AppError } from "@/app/lib/appError";
 
 /** Same marker songFolder.ts drops into folders created by this app. */
@@ -84,6 +84,7 @@ async function findTxt(dir: string): Promise<string | null> {
 
 const AUDIO_EXTS = new Set([".mp3", ".ogg", ".opus", ".m4a", ".wav", ".flac"]);
 const VIDEO_EXTS = new Set([".mp4", ".mkv", ".webm", ".avi", ".mov"]);
+const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
 /** Lowercased name without extension, spaces or punctuation: "Sum41 - War .mp3" ≈ "Sum 41 - War.mp3". */
 function looseKey(name: string): string {
@@ -162,6 +163,8 @@ export async function importFromLibrary(folder: string): Promise<string> {
   if (!mp3Src) throw new AppError("api.audioTagMissing", { name: parsed.mp3Filename || "—" }, 404);
   const videoSrc = parsed.videoFilename ? resolveInFolder(dir, parsed.videoFilename, files, VIDEO_EXTS) : null;
 
+  const coverSrc = parsed.coverFilename ? resolveInFolder(dir, parsed.coverFilename, files, IMAGE_EXTS) : null;
+
   const id = crypto.randomUUID();
   const draftPath = path.join(DRAFTS_DIR, id);
   await mkdir(draftPath, { recursive: true });
@@ -174,6 +177,9 @@ export async function importFromLibrary(folder: string): Promise<string> {
     videoFilename = "video" + (path.extname(videoSrc).toLowerCase() || ".mp4");
     await copyFile(videoSrc, path.join(draftPath, videoFilename));
   }
+
+  // The song's own cover travels with the draft (as audio.jpg, see coverPathFor)
+  if (coverSrc) await extractCover(coverSrc, coverPathFor(path.join(draftPath, "audio.mp3")));
 
   const draft = {
     id,

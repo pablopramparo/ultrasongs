@@ -67,7 +67,6 @@ export default function DraftsSidebar({
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Asking before a bulk write: `dir` is the folder it would write to (null = not configured yet)
-  const [confirmAll, setConfirmAll] = useState<{ dir: string | null } | null>(null);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importTxt, setImportTxt] = useState<File | null>(null);
@@ -202,37 +201,6 @@ export default function DraftsSidebar({
     setExportMsg(null);
     const err = await exportDraft(d.id);
     setExportMsg(err ? { ok: false, text: `${d.title}: ${err}` } : { ok: true, text: t("sidebar.savedOne", { title: d.title }) });
-    setExporting(null);
-  };
-
-  /** First step of "save all": show where everything would be written and ask. */
-  const askExportAll = async () => {
-    setExportMsg(null);
-    try {
-      const res = await fetch("/api/settings");
-      const s = await res.json();
-      setConfirmAll({ dir: s.songsDir ?? null });
-    } catch {
-      setConfirmAll({ dir: null });
-    }
-  };
-
-  /** Second step, only reached from the confirmation panel. */
-  const handleExportAll = async () => {
-    setConfirmAll(null);
-    setExporting("all");
-    setExportMsg(null);
-    let okCount = 0;
-    const failures: string[] = [];
-    for (const d of drafts) {
-      const err = await exportDraft(d.id);
-      if (err) failures.push(`${d.title}: ${err}`);
-      else okCount++;
-    }
-    setExportMsg({
-      ok: failures.length === 0,
-      text: t("sidebar.savedMany", { n: okCount }) + (failures.length ? `. ${failures.join(" · ")}` : ""),
-    });
     setExporting(null);
   };
 
@@ -395,50 +363,6 @@ export default function DraftsSidebar({
           </div>
         )}
 
-        {/* Save drafts to the Songs folder (single drafts have their own icon) */}
-        {drafts.length > 0 && (
-          <div className="border-t border-zinc-800 px-3 py-2">
-            {!confirmAll ? (
-              <button
-                onClick={askExportAll}
-                disabled={exporting !== null}
-                title={t("sidebar.saveAllTitle")}
-                className={footerBtn}
-              >
-                {exporting === "all" ? t("sidebar.saving") : t("sidebar.saveAll")}
-              </button>
-            ) : confirmAll.dir ? (
-              <div className="flex flex-col gap-2 rounded-lg border border-amber-900/70 bg-amber-950/30 p-3 text-xs">
-                <p className="text-amber-200">{t("sidebar.confirmSaveAll", { n: drafts.length })}</p>
-                <p className="break-all rounded-md bg-zinc-950 px-2 py-1.5 font-mono text-zinc-300">{confirmAll.dir}</p>
-                <p className="text-zinc-400">{t("sidebar.confirmSaveAllNote")}</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <button onClick={handleExportAll} className="btn btn-primary !px-3 !py-1.5 text-xs">
-                    {t("sidebar.confirmYes")}
-                  </button>
-                  <button onClick={() => setConfirmAll(null)} className="px-2 text-xs text-zinc-400 hover:text-zinc-100">
-                    {t("action.cancel")}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs">
-                <p className="text-zinc-300">{t("api.pickSongsFirst")}</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setConfirmAll(null); onOpenSettings(); }}
-                    className="btn btn-secondary !px-3 !py-1.5 text-xs"
-                  >
-                    {t("sidebar.settings")}
-                  </button>
-                  <button onClick={() => setConfirmAll(null)} className="px-2 text-xs text-zinc-400 hover:text-zinc-100">
-                    {t("action.cancel")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {exportMsg && (
           <p className={`border-t border-zinc-800 px-5 py-2 text-xs ${exportMsg.ok ? "text-green-400" : "text-red-400"}`}>

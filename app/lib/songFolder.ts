@@ -162,6 +162,9 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   await copyFile(mp3Path, path.join(dir, mp3Name));
   if (videoPath && videoName) await copyFile(videoPath, path.join(dir, videoName));
   if (coverName && hasCover) await copyFile(coverSrc, path.join(dir, coverName));
+  // The folder had a cover the draft did not: the draft takes it, so it shows in the editor and
+  // survives the next export (the mp3 sits in the draft's own folder when exporting a draft).
+  else if (coverName) await copyFile(path.join(dir, coverName), coverSrc).catch(() => null);
   if (draftId) await linkDraft(draftId, base, txt);
   return dir;
 }

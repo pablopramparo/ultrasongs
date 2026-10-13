@@ -185,6 +185,7 @@ export interface ParsedUltrastar {
   gap: number;
   mp3Filename: string;
   videoFilename?: string;
+  coverFilename?: string;
   notes: UltrastarNote[];
 }
 
@@ -224,6 +225,7 @@ export function parseUltrastarTxt(content: string): ParsedUltrastar {
     gap: parseInt(meta.GAP ?? "0"),
     mp3Filename: meta.MP3 ?? "",
     videoFilename: meta.VIDEO,
+    coverFilename: meta.COVER,
     notes,
   };
 }
