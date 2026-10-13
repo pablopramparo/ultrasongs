@@ -1,6 +1,6 @@
 [package]
 name = "ultrasongs"
-version = "0.3.8"
+version = "0.3.9"
 description = "Ultrastar Deluxe song generator"
 edition = "2021"
 

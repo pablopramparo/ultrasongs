@@ -43,7 +43,7 @@ function pitchOffsetFor(notes: ParsedUltrastar["notes"]): number {
 
 /**
  * Converts parsed Ultrastar notes (beats) to timeline-editor notes (seconds). Phrase breaks ("-"
- * lines) become a `lineStart` flag on the note that opens each phrase.
+ * lines) become a `lineStart` flag, plus the marker's own position (`breakSec`), on the note that opens each phrase.
  */
 export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
   const beatsPerSec = (parsed.bpm / 60) * 4;
@@ -52,7 +52,6 @@ export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
   const hasBreaks = parsed.notes.some((n) => n.type === "-");
   const out: EditorNote[] = [];
   let opensPhrase = false;
-  let lastEndBeat = 0;
   let breakBeat = 0;
 
   for (const n of parsed.notes) {
@@ -61,12 +60,6 @@ export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
       breakBeat = n.startBeat;
       continue;
     }
-    // A break right after the previous note, with room before this one, is an explicit phrase end
-    // (instrumental part): keep it, otherwise it would move to 4 beats before this note on export.
-    if (opensPhrase && out.length > 0 && breakBeat - lastEndBeat <= 2 && n.startBeat - breakBeat > 4) {
-      out[out.length - 1].breakAfter = true;
-    }
-    lastEndBeat = n.startBeat + n.duration;
     out.push({
       id: crypto.randomUUID(),
       syllable: n.syllable,
@@ -75,6 +68,8 @@ export function ultrastarToEditorNotes(parsed: ParsedUltrastar): EditorNote[] {
       pitch: n.pitch + offset,
       type: n.type as EditorNote["type"],
       ...(hasBreaks ? { lineStart: opensPhrase } : {}),
+      // The "-" keeps the exact beat it had in the file, as a marker of its own
+      ...(opensPhrase ? { breakSec: parsed.gap / 1000 + breakBeat / beatsPerSec } : {}),
     });
     opensPhrase = false;
   }

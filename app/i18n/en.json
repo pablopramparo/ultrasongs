@@ -12,6 +12,7 @@
   "cover.replace": "Replace",
   "cover.none": "No cover (the one embedded in the mp3 is used, if any)",
   "cover.failed": "That image could not be used",
+  "editor.phraseMarkerTitle": "Phrase start: drag to move it",
   "section.infoLyrics": "Info & lyrics",
   "form.title": "Title",
   "form.artist": "Artist",

@@ -22,6 +22,23 @@ export interface EditorNote {
    * right after this note ends, instead of a few beats before the next phrase starts.
    */
   breakAfter?: boolean;
+  /**
+   * Own position (seconds) of the "-" line that opens this phrase, independent of the note: moving
+   * the note leaves it where it was (it is held inside the gap before the note). Undefined = placed
+   * automatically. Only meaningful together with `lineStart`.
+   */
+  breakSec?: number;
+}
+
+/**
+ * Seconds at which the phrase marker before `sorted[i]` sits: its own `breakSec` held inside the gap
+ * between the previous note's end and this note's start, or this note's start when it has none.
+ */
+export function phraseBreakSec(sorted: EditorNote[], i: number): number {
+  const n = sorted[i];
+  if (n.breakSec === undefined) return n.startSec;
+  const prevEnd = i > 0 ? sorted[i - 1].startSec + sorted[i - 1].durationSec : 0;
+  return Math.min(n.startSec, Math.max(prevEnd, n.breakSec));
 }
 
 /** Silence between two notes (seconds) from which a new phrase is assumed to start. */

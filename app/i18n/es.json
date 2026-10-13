@@ -12,6 +12,7 @@
   "cover.replace": "Reemplazar",
   "cover.none": "Sin carátula (se usa la incrustada en el mp3, si la tiene)",
   "cover.failed": "No se pudo usar esa imagen",
+  "editor.phraseMarkerTitle": "Inicio de frase: arrastralo para moverlo",
   "section.infoLyrics": "Info y letra",
   "form.title": "Título",
   "form.artist": "Artista",

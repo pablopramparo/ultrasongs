@@ -53,9 +53,17 @@ export function editorNotesToUltrastar(
     const duration = Math.max(1, endBeat - startBeat);
 
     if (prevEnd >= 0 && (en.lineStart || prevBreakAfter)) {
-      // Same placement as the auto mode: 4 beats before the next note, never before the last one ends.
-      // A note marked `breakAfter` (instrumental follows) closes its phrase right where it ends.
-      const breakBeat = prevBreakAfter ? prevEnd + 1 : Math.max(prevEnd + 1, startBeat - 4);
+      // A marker with its own position is written where it is, held inside the gap between notes.
+      // Otherwise the same placement as the auto mode: 4 beats before the next note, never before the
+      // last one ends; a note marked `breakAfter` (instrumental follows) closes its phrase right
+      // where it ends.
+      let breakBeat: number;
+      if (en.breakSec !== undefined) {
+        const wanted = msToBeats(en.breakSec * 1000, bpm, gap);
+        breakBeat = Math.min(Math.max(prevEnd + 1, wanted), Math.max(prevEnd + 1, startBeat - 1));
+      } else {
+        breakBeat = prevBreakAfter ? prevEnd + 1 : Math.max(prevEnd + 1, startBeat - 4);
+      }
       out.push({ type: "-", startBeat: breakBeat, duration: 0, pitch: 0, syllable: "" });
       prevEnd = breakBeat;
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
-import { hasLineMarks, inferLineStarts, type EditorNote, type NoteType } from "@/app/lib/editorNote";
+import { hasLineMarks, inferLineStarts, phraseBreakSec, type EditorNote, type NoteType } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
@@ -87,7 +87,9 @@ function withoutNote(list: EditorNote[], id: string): EditorNote[] {
   if (idx === -1) return list;
   const removed = list[idx];
   const rest = list.filter((n) => n.id !== id);
-  if (removed.lineStart && rest[idx] && !rest[idx].lineStart) rest[idx] = { ...rest[idx], lineStart: true };
+  if (removed.lineStart && rest[idx] && !rest[idx].lineStart) {
+    rest[idx] = { ...rest[idx], lineStart: true, breakSec: removed.breakSec };
+  }
   return rest;
 }
 
@@ -945,6 +947,38 @@ export default function TimelineEditor({
     [snapshot]
   );
 
+  // ── Drag a phrase marker ──────────────────────────────────────────────────
+  // The marker moves on its own, between the end of the previous note and the start of the one it opens.
+  const startBreakDrag = useCallback(
+    (e: React.MouseEvent, noteId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const sorted = [...mixNotesRef.current].sort((a, b) => a.startSec - b.startSec);
+      const i = sorted.findIndex((n) => n.id === noteId);
+      if (i < 1) return;
+      const base = phraseBreakSec(sorted, i);
+      const hi = sorted[i].startSec;
+      const lo = Math.min(hi, sorted[i - 1].startSec + sorted[i - 1].durationSec);
+      const startX = e.clientX;
+      let moved = false;
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        if (!moved && Math.abs(dx) < 3) return;
+        if (!moved) snapshot();
+        moved = true;
+        const sec = Math.min(hi, Math.max(lo, base + dx / pxPerSecRef.current));
+        setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, breakSec: sec } : n)));
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [snapshot]
+  );
+
   // ── Rubber-band selection on empty grid ───────────────────────────────────
   const startMarquee = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || addModeRef.current) return;
@@ -1174,7 +1208,9 @@ export default function TimelineEditor({
       if (e.code === "KeyL" && !mod && selection.length > 0) {
         e.preventDefault();
         snapshot();
-        setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: !n.lineStart } : n)));
+        setNotes((prev) =>
+          prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: !n.lineStart, breakSec: undefined } : n))
+        );
       }
       // B: phrase ends after this note (an instrumental part follows)
       if (e.code === "KeyB" && !mod && selection.length > 0) {
@@ -1263,7 +1299,6 @@ export default function TimelineEditor({
     `repeating-linear-gradient(to right, rgba(148,163,184,0.07) 0, rgba(148,163,184,0.07) 1px, transparent 1px, transparent ${minorStep * pxPerSec}px)`,
   ].join(",");
 
-  const firstStart = notes.reduce((m, n) => Math.min(m, n.startSec), Infinity);
   // Shared control sizes: every small control in the bar is 32 px tall
   const chip =
     "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-800 px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40";
@@ -1664,15 +1699,26 @@ export default function TimelineEditor({
           ))}
 
           {/* Phrase starts: a dashed line just before the first note of each phrase */}
-          {notes.map((n) =>
-            n.lineStart && n.startSec > firstStart + 1e-6 ? (
+          {[...notes].sort((a, b) => a.startSec - b.startSec).map((n, i, sorted) =>
+            n.lineStart && i > 0 ? (
               <div
                 key={`phrase-${n.id}`}
+                title={t("editor.phraseMarkerTitle")}
+                onMouseDown={(e) => startBreakDrag(e, n.id)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
                 style={{
-                  position: "absolute", left: KEYS_W + n.startSec * pxPerSec - 3, top: 0, height: rollH,
-                  borderLeft: "1px dashed rgba(168,85,247,0.65)", zIndex: 5, pointerEvents: "none",
+                  position: "absolute", left: KEYS_W + phraseBreakSec(sorted, i) * pxPerSec - 7, top: 0,
+                  width: 9, height: rollH, cursor: "ew-resize", zIndex: 35,
                 }}
-              />
+              >
+                <div
+                  style={{
+                    position: "absolute", left: 4, top: 0, bottom: 0,
+                    borderLeft: "1px dashed rgba(168,85,247,0.85)", pointerEvents: "none",
+                  }}
+                />
+              </div>
             ) : null
           )}
 
