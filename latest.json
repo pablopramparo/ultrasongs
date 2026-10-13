@@ -1,11 +1,11 @@
 {
-  "version": "0.3.12",
-  "notes": "Drafts saved before the word-spacing fix are repaired when opened or exported.",
-  "pub_date": "2026-10-13T02:43:28.553Z",
+  "version": "0.3.13",
+  "notes": "Re-exporting a song keeps its cover and its #COVER tag.",
+  "pub_date": "2026-10-13T02:55:09.697Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0Frb0pLMWRBT2F2RmNWWHFteWNXdEFxVHRMRkdqdktDUG1ZQk5hNHV0WkdqNUZOS3BRV0FkUUJLTHRRdzRMb3RWekV0YVE4RE1xUU9YSlVyU2NWbUEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODU5NDA4CWZpbGU6VWx0cmFzb25nc18wLjMuMTJfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMgpQOExEU3pBQkNWUlFHWmhQbXBwZU9qMlBEaGZkbWw2OFd3YzNiMUhNMmRjYjRlaVp5b1FVVHFWR3J1N3M3OHNHc1lVYlAvNDFsWjVtYVhDS0s2RVNDQT09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.12/Ultrasongs_0.3.12_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0llbWVFd0p6S1VsaERyTHl6RmlXNmR4K2owUTdhQzc4ZFRqQTRjTGhySG5QRVpKaUlmcTUydTA4dzlDMmpvK2NFWko2V0ZZNHNiVk1IaDVybUs2Snc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODYwMTA5CWZpbGU6VWx0cmFzb25nc18wLjMuMTNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xMwpRQ2daTGM2bXFMTkd3ekFSRGhCYXlMdW9zaFMwMFFnS3lnc3RUOW9aUEZmWjAveCtrRDc0QWlocjJyODg3cTRpTTJqNGNtQ2xiWW02MjMyMEFYQk5Ddz09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.13/Ultrasongs_0.3.13_x64-setup.exe"
     }
   }
 }
