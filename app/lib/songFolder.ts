@@ -148,8 +148,11 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
 
   const mp3Name = `${base}.mp3`;
   const videoName = videoPath ? `${base}${path.extname(videoPath) || ".mp4"}` : undefined;
+  // The mp3's own cover, or the one a previous export left in this folder (a draft does not always
+  // carry it): without #COVER Ultrastar ignores the image even though it is sitting there.
   const coverSrc = coverPathFor(mp3Path);
-  const coverName = existsSync(coverSrc) ? `${base}.jpg` : undefined;
+  const hasCover = existsSync(coverSrc);
+  const coverName = hasCover || existsSync(path.join(dir, `${base}.jpg`)) ? `${base}.jpg` : undefined;
   const meta: UltrastarMeta = { title, artist, mp3: mp3Name, bpm, gap, video: videoName, cover: coverName };
 
   await mkdir(dir, { recursive: true });
@@ -158,7 +161,7 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   await writeFile(path.join(dir, `${base}.txt`), txt, "utf8");
   await copyFile(mp3Path, path.join(dir, mp3Name));
   if (videoPath && videoName) await copyFile(videoPath, path.join(dir, videoName));
-  if (coverName) await copyFile(coverSrc, path.join(dir, coverName));
+  if (coverName && hasCover) await copyFile(coverSrc, path.join(dir, coverName));
   if (draftId) await linkDraft(draftId, base, txt);
   return dir;
 }
