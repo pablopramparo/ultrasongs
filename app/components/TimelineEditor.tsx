@@ -104,7 +104,8 @@ function createToneScheduler(
   ctx: AudioContext,
   dest: AudioNode,
   getSongTime: () => number,
-  getNotes: () => EditorNote[]
+  getNotes: () => EditorNote[],
+  getRate: () => number = () => 1
 ) {
   const LOOKAHEAD = 0.3;
   const scheduled = new Set<string>();
@@ -129,9 +130,12 @@ function createToneScheduler(
       scheduled.add(n.id);
       const delay = n.startSec - t;
       // A note already under way is clipped to its remaining part.
-      const remaining = delay < 0 ? n.durationSec + delay : n.durationSec;
-      if (remaining <= 0.02) continue;
-      const at = ctx.currentTime + Math.max(0, delay);
+      const songRemaining = delay < 0 ? n.durationSec + delay : n.durationSec;
+      if (songRemaining <= 0.02) continue;
+      // Song seconds -> wall-clock seconds at the current playback speed
+      const rate = getRate();
+      const remaining = songRemaining / rate;
+      const at = ctx.currentTime + Math.max(0, delay) / rate;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
@@ -332,6 +336,8 @@ export default function TimelineEditor({
   // Mixer: music is the audio element's volume; notes are synth tones (0 = off).
   const [musicVol, setMusicVol] = useState(1);
   const [noteVol, setNoteVol] = useState(0);
+  const [playbackRate, setPlaybackRateState] = useState(1);
+  const playbackRateRef = useRef(1);
   // Muting keeps the slider where it was, so un-muting brings the previous level back.
   const [musicMuted, setMusicMuted] = useState(false);
   const [notesMuted, setNotesMuted] = useState(false);
@@ -545,6 +551,14 @@ export default function TimelineEditor({
     rafRef.current = requestAnimationFrame(tick);
   }, [isMicTracePlaying, isPlaying, isNotePlaying, micTrace, notes, playheadSec, stopMicTracePlay, stopNotePlay]);
 
+  // Speed applies to the song and the video; pitch is preserved so slowed-down audio stays in tune.
+  const applyRate = useCallback((r: number) => {
+    for (const m of [audioRef.current, videoRef.current]) {
+      if (!m) continue;
+      m.preservesPitch = true;
+      m.playbackRate = r;
+    }
+  }, []);
   const togglePlay = useCallback(() => {
     if (isNotePlaying) stopNotePlay();
     const a = audioRef.current;
@@ -556,6 +570,7 @@ export default function TimelineEditor({
       setIsPlaying(false);
     } else {
       if (videoRef.current) videoRef.current.currentTime = a.currentTime;
+      applyRate(playbackRateRef.current);
       a.play();
       videoRef.current?.play().catch(() => {});
       // Clear previous mic trace so each play session starts fresh
@@ -568,7 +583,7 @@ export default function TimelineEditor({
       };
       rafRef.current = requestAnimationFrame(tick);
     }
-  }, [isPlaying, isNotePlaying, stopNotePlay]);
+  }, [isPlaying, isNotePlaying, stopNotePlay, applyRate]);
 
   // ── Song + notes together ─────────────────────────────────────────────────
   // While the song plays with "Notas" on, synth tones are scheduled on a separate AudioContext
@@ -588,6 +603,18 @@ export default function TimelineEditor({
 
   const notesAudible = noteVol > 0;
 
+  useEffect(() => { applyRate(playbackRate); }, [playbackRate, applyRate, videoUrl]);
+  const setPlaybackRate = useCallback((r: number) => {
+    // The notes-only clock advances by wall time x rate: rebase it so the playhead does not jump
+    const c = notePlayCtxRef.current;
+    if (c) {
+      notePlayOffsetRef.current += (c.currentTime - notePlayStartRef.current) * playbackRateRef.current;
+      notePlayStartRef.current = c.currentTime;
+    }
+    playbackRateRef.current = r;
+    setPlaybackRateState(r);
+  }, []);
+
   useEffect(() => {
     if (!isPlaying || !notesAudible) return;
     const a = audioRef.current;
@@ -599,7 +626,9 @@ export default function TimelineEditor({
     master.connect(ctx.destination);
     noteMasterRef.current = master;
 
-    const scheduler = createToneScheduler(ctx, master, () => a.currentTime, () => mixNotesRef.current);
+    const scheduler = createToneScheduler(
+      ctx, master, () => a.currentTime, () => mixNotesRef.current, () => playbackRateRef.current
+    );
     toneSchedulerRef.current = scheduler;
 
     return () => {
@@ -625,8 +654,9 @@ export default function TimelineEditor({
     toneSchedulerRef.current = createToneScheduler(
       ctx,
       ctx.destination,
-      () => notePlayOffsetRef.current + (ctx.currentTime - notePlayStartRef.current),
-      () => mixNotesRef.current
+      () => notePlayOffsetRef.current + (ctx.currentTime - notePlayStartRef.current) * playbackRateRef.current,
+      () => mixNotesRef.current,
+      () => playbackRateRef.current
     );
 
     setMicTrace([]);
@@ -635,7 +665,8 @@ export default function TimelineEditor({
     const tick = () => {
       const c = notePlayCtxRef.current;
       if (!c) return;
-      const songTime = notePlayOffsetRef.current + (c.currentTime - notePlayStartRef.current);
+      const songTime = notePlayOffsetRef.current
+        + (c.currentTime - notePlayStartRef.current) * playbackRateRef.current;
       setPlayheadSec(songTime);
       if (songTime >= duration + 1) { stopNotePlay(); return; }
       rafRef.current = requestAnimationFrame(tick);
@@ -1348,6 +1379,19 @@ export default function TimelineEditor({
             />
           </div>
         </div>
+
+        <label className="flex select-none items-center gap-1.5 text-zinc-400" title={t("editor.speedTitle")}>
+          <span>{t("editor.speed")}</span>
+          <select
+            value={playbackRate}
+            onChange={(e) => setPlaybackRate(Number(e.target.value))}
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-zinc-200"
+          >
+            {[0.5, 0.75, 1].map((r) => (
+              <option key={r} value={r}>{r}×</option>
+            ))}
+          </select>
+        </label>
 
         <span className={divider} aria-hidden />
 

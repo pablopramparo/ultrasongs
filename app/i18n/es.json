@@ -194,6 +194,8 @@
   "editor.notesOnlyTitle": "Reproducir solo las notas sintetizadas, sin la canción (para revisar la melodía)",
   "editor.music": "Música",
   "editor.musicTitle": "Volumen de la canción (0 = solo notas)",
+  "editor.speed": "Velocidad",
+  "editor.speedTitle": "Velocidad de reproducción",
   "editor.notes": "Notas",
   "editor.notesTitle": "Volumen de las notas sintetizadas (0 = sin notas)",
   "editor.syllable": "sílaba",

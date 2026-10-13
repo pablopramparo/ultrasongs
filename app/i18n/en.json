@@ -194,6 +194,8 @@
   "editor.notesOnlyTitle": "Play only the synthesized notes, without the song (to check the melody)",
   "editor.music": "Music",
   "editor.musicTitle": "Song volume (0 = notes only)",
+  "editor.speed": "Speed",
+  "editor.speedTitle": "Playback speed",
   "editor.notes": "Notes",
   "editor.notesTitle": "Synthesized notes volume (0 = no notes)",
   "editor.syllable": "syllable",
