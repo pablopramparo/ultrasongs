@@ -5,6 +5,7 @@ import { existsSync } from "fs";
 import path from "path";
 import { draftDir } from "@/app/lib/safePath";
 import { editorNotesToUltrastar } from "@/app/lib/ultrastar";
+import { withWordSpaces } from "@/app/lib/editorNote";
 import { saveSongFolder } from "@/app/lib/songFolder";
 import { getSongsDir } from "@/app/lib/settings";
 
@@ -37,7 +38,7 @@ export async function POST(
       songsDir,
       title: d.title,
       artist: d.artist,
-      notes: editorNotesToUltrastar(d.notes, d.bpm, d.gap),
+      notes: editorNotesToUltrastar(withWordSpaces(d.notes, d.lyrics), d.bpm, d.gap),
       bpm: d.bpm,
       gap: d.gap,
       mp3Path,

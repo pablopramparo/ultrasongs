@@ -61,3 +61,44 @@ export function inferLineStarts(notes: EditorNote[], gapSec = LINE_BREAK_GAP_SEC
     return { ...n, lineStart: start };
   });
 }
+
+const letters = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * Drafts saved before word starts carried a leading space hold syllables with no spaces at all, so
+ * Ultrastar shows each line glued together. When no note has one, this walks the lyrics word by word
+ * against the syllables (in time order) and puts the space on the first syllable of every word that
+ * does not open a phrase. Notes that do not match the lyrics (edited text, extra notes) are left as
+ * they are, and a song that already has spaces is returned untouched.
+ */
+export function withWordSpaces(notes: EditorNote[], lyrics: string | undefined): EditorNote[] {
+  if (!lyrics?.trim() || notes.length === 0) return notes;
+  if (notes.some((n) => n.syllable.startsWith(" "))) return notes;
+
+  const words = lyrics.split(/\s+/).map(letters).filter(Boolean);
+  const order = [...notes].sort((a, b) => a.startSec - b.startSec);
+  const starts = new Set<string>();
+  let wi = 0;
+  let pos = 0;
+
+  for (const n of order) {
+    const s = letters(n.syllable);
+    if (!s || wi >= words.length) continue; // "~", "+", …: continuation of the previous note
+    let hit = words[wi].startsWith(s, pos);
+    if (!hit) {
+      // Lost sync (a word was skipped or edited): the syllable may open one of the next few words
+      for (let k = wi + 1; k <= Math.min(wi + 3, words.length - 1) && !hit; k++) {
+        if (words[k].startsWith(s)) { wi = k; pos = 0; hit = true; }
+      }
+    }
+    if (!hit) continue;
+    if (pos === 0) starts.add(n.id);
+    pos += s.length;
+    if (pos >= words[wi].length) { wi++; pos = 0; }
+  }
+
+  const first = order[0]?.id;
+  return notes.map((n) =>
+    starts.has(n.id) && n.id !== first && !n.lineStart ? { ...n, syllable: ` ${n.syllable}` } : n
+  );
+}

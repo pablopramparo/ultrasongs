@@ -4,6 +4,7 @@ import { readFile, writeFile, rm } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { draftDir } from "@/app/lib/safePath";
+import { withWordSpaces } from "@/app/lib/editorNote";
 
 export async function GET(
   _req: NextRequest,
@@ -20,6 +21,7 @@ export async function GET(
     const data = JSON.parse(await readFile(jsonPath, "utf-8"));
     return NextResponse.json({
       ...data,
+      notes: withWordSpaces(data.notes, data.lyrics),
       mp3: path.join(dir, data.audioFilename),
       videoPath: data.videoFilename ? path.join(dir, data.videoFilename) : undefined,
       vocalsPath: data.vocalsFilename ? path.join(dir, data.vocalsFilename) : undefined,
