@@ -180,6 +180,8 @@ interface Props {
   draftId?: string;
   /** `withStems` is true when the vocals/instrumental stems should be exported too. */
   onExport: (notes: EditorNote[], bpm: number, gap: number, withStems: boolean) => void;
+  /** Called after the draft was written to disk, so the parent keeps its copy of the notes in sync. */
+  onSaved?: (notes: EditorNote[], bpm: number, gap: number) => void;
   /** The draft has separated vocals and instrumental tracks: shows the option to export them. */
   hasStems?: boolean;
   /** Progress and result of the last export, shown inside the editor (the page behind it is hidden). */
@@ -195,7 +197,7 @@ interface Props {
 }
 
 export default function TimelineEditor({
-  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, hasStems, exportStatus, onClose,
+  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, onSaved, hasStems, exportStatus, onClose,
 }: Props) {
   const { t } = useI18n();
   const [exportStems, setExportStems] = useState(() => {
@@ -451,12 +453,13 @@ export default function TimelineEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes, bpm, gap }),
       });
+      if (res.ok) onSaved?.(notes, bpm, gap);
       setSaveStatus(res.ok ? "saved" : "error");
     } catch {
       setSaveStatus("error");
     }
     setTimeout(() => setSaveStatus("idle"), 2000);
-  }, [draftId, notes, bpm, gap]);
+  }, [draftId, notes, bpm, gap, onSaved]);
 
   const stopNotePlay = useCallback(() => {
     toneSchedulerRef.current?.stop();

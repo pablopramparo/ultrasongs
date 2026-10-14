@@ -499,6 +499,8 @@ export default function Home() {
   // ── Export from editor ───────────────────────────────────────────────────
   const handleEditorExport = useCallback(async (notes: EditorNote[], bpm: number, gap: number, withStems: boolean) => {
     if (!uploadRef.current) return;
+    // Keep the page's copy in sync so reopening the editor shows what was just exported
+    setAlignResult({ notes, bpm, gap });
     setPhase("generating");
     setError(null);
     if (prevDownloadUrl.current) { URL.revokeObjectURL(prevDownloadUrl.current); prevDownloadUrl.current = null; }
@@ -556,6 +558,7 @@ export default function Home() {
           artist={artist}
           draftId={currentDraftId ?? undefined}
           onExport={handleEditorExport}
+          onSaved={(notes, bpm, gap) => setAlignResult({ notes, bpm, gap })}
           hasStems={!!uploadRef.current?.vocalsPath && !!uploadRef.current?.accompanimentPath}
           exportStatus={{
             busy: phase === "generating",
