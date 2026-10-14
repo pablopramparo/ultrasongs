@@ -22,6 +22,9 @@ export interface UltrastarMeta {
   gap: number;
   video?: string;
   cover?: string;
+  /** Separated stems (Ultrastar v1.0 `#VOCALS` / `#INSTRUMENTAL`); players that lack them ignore the tags. */
+  vocals?: string;
+  instrumental?: string;
 }
 
 /**
@@ -84,6 +87,8 @@ export function buildUltrastarTxt(notes: UltrastarNote[], meta: UltrastarMeta): 
     `#TITLE:${meta.title}`,
     `#ARTIST:${meta.artist}`,
     `#MP3:${meta.mp3}`,
+    ...(meta.vocals ? [`#VOCALS:${meta.vocals}`] : []),
+    ...(meta.instrumental ? [`#INSTRUMENTAL:${meta.instrumental}`] : []),
     ...(meta.cover ? [`#COVER:${meta.cover}`] : []),
     ...(meta.video ? [`#VIDEO:${meta.video}`] : []),
     `#BPM:${meta.bpm.toFixed(2)}`,

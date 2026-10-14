@@ -121,6 +121,8 @@
   "about.poweredBy": "Powered by",
   "about.format": "Generates songs for",
   "about.license": "Source code released under the MIT license. The Ultrasongs name and logo are not covered by it.",
+  "editor.exportStems": "Vocals and instrumental separately",
+  "editor.exportStemsHint": "Adds [VOC].mp3 and [INSTR].mp3 to the song (#VOCALS / #INSTRUMENTAL)",
   "settings.choose": "Choose",
   "settings.change": "Change",
   "settings.notSet": "Not set (only the ZIP is downloaded)",

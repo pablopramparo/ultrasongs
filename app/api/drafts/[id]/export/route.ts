@@ -34,6 +34,7 @@ export async function POST(
     }
     const videoPath = d.videoFilename ? path.join(dir, d.videoFilename) : undefined;
 
+    // Stems go along when the draft has them; the sidebar has no per-song switch for this.
     const saved = await saveSongFolder({
       songsDir,
       title: d.title,
@@ -42,6 +43,8 @@ export async function POST(
       bpm: d.bpm,
       gap: d.gap,
       mp3Path,
+      vocalsPath: d.vocalsFilename ? path.join(dir, d.vocalsFilename) : undefined,
+      instrumentalPath: d.accompanimentFilename ? path.join(dir, d.accompanimentFilename) : undefined,
       videoPath: videoPath && existsSync(videoPath) ? videoPath : undefined,
       draftId: id,
     });

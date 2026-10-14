@@ -497,7 +497,7 @@ export default function Home() {
   }, [lyrics, alignResult, t]);
 
   // ── Export from editor ───────────────────────────────────────────────────
-  const handleEditorExport = useCallback(async (notes: EditorNote[], bpm: number, gap: number) => {
+  const handleEditorExport = useCallback(async (notes: EditorNote[], bpm: number, gap: number, withStems: boolean) => {
     if (!uploadRef.current) return;
     setPhase("generating");
     setError(null);
@@ -513,6 +513,7 @@ export default function Home() {
           videoPath: uploadRef.current.videoPath,
           vocalsPath: uploadRef.current.vocalsPath,
           accompanimentPath: uploadRef.current.accompanimentPath,
+          exportStems: withStems,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
@@ -555,6 +556,7 @@ export default function Home() {
           artist={artist}
           draftId={currentDraftId ?? undefined}
           onExport={handleEditorExport}
+          hasStems={!!uploadRef.current?.vocalsPath && !!uploadRef.current?.accompanimentPath}
           exportStatus={{
             busy: phase === "generating",
             url: downloadUrl,

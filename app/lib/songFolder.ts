@@ -25,6 +25,9 @@ interface SaveSongInput {
   gap: number;
   mp3Path: string;
   videoPath?: string;
+  /** Demucs stems, written next to the mp3 as `<base> [VOC].mp3` / `<base> [INSTR].mp3`. */
+  vocalsPath?: string;
+  instrumentalPath?: string;
   /** Draft this song comes from: it gets linked to the folder (see draftLink.ts). */
   draftId?: string;
 }
@@ -112,6 +115,8 @@ async function updateForeignFolder(
  */
 export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   const { songsDir, title, artist, notes, bpm, gap, mp3Path, videoPath, draftId } = input;
+  const vocalsPath = input.vocalsPath && existsSync(input.vocalsPath) ? input.vocalsPath : undefined;
+  const instrumentalPath = input.instrumentalPath && existsSync(input.instrumentalPath) ? input.instrumentalPath : undefined;
   const base = `${safeName(artist)} - ${safeName(title)}`;
   const dir = path.join(songsDir, base);
   if (!isInside(songsDir, dir)) throw new AppError("api.songNameInvalid", undefined, 400);
@@ -153,7 +158,14 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   const coverSrc = coverPathFor(mp3Path);
   const hasCover = existsSync(coverSrc);
   const coverName = hasCover || existsSync(path.join(dir, `${base}.jpg`)) ? `${base}.jpg` : undefined;
-  const meta: UltrastarMeta = { title, artist, mp3: mp3Name, bpm, gap, video: videoName, cover: coverName };
+  // Both stems or none: a lone one would leave the player with a half-working split.
+  const stems = vocalsPath && instrumentalPath;
+  const vocalsName = stems ? `${base} [VOC].mp3` : undefined;
+  const instrumentalName = stems ? `${base} [INSTR].mp3` : undefined;
+  const meta: UltrastarMeta = {
+    title, artist, mp3: mp3Name, bpm, gap, video: videoName, cover: coverName,
+    vocals: vocalsName, instrumental: instrumentalName,
+  };
 
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, MARKER), "", "utf8");
@@ -161,6 +173,8 @@ export async function saveSongFolder(input: SaveSongInput): Promise<string> {
   await writeFile(path.join(dir, `${base}.txt`), txt, "utf8");
   await copyFile(mp3Path, path.join(dir, mp3Name));
   if (videoPath && videoName) await copyFile(videoPath, path.join(dir, videoName));
+  if (vocalsPath && vocalsName) await copyFile(vocalsPath, path.join(dir, vocalsName));
+  if (instrumentalPath && instrumentalName) await copyFile(instrumentalPath, path.join(dir, instrumentalName));
   if (coverName && hasCover) await copyFile(coverSrc, path.join(dir, coverName));
   // The folder had a cover the draft did not: the draft takes it, so it shows in the editor and
   // survives the next export (the mp3 sits in the draft's own folder when exporting a draft).

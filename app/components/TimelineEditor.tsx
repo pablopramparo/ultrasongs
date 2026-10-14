@@ -178,7 +178,10 @@ interface Props {
   title: string;
   artist: string;
   draftId?: string;
-  onExport: (notes: EditorNote[], bpm: number, gap: number) => void;
+  /** `withStems` is true when the vocals/instrumental stems should be exported too. */
+  onExport: (notes: EditorNote[], bpm: number, gap: number, withStems: boolean) => void;
+  /** The draft has separated vocals and instrumental tracks: shows the option to export them. */
+  hasStems?: boolean;
   /** Progress and result of the last export, shown inside the editor (the page behind it is hidden). */
   exportStatus?: {
     busy: boolean;
@@ -192,9 +195,12 @@ interface Props {
 }
 
 export default function TimelineEditor({
-  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, exportStatus, onClose,
+  initialNotes, bpm, gap, audioUrl, videoUrl, title, artist, draftId, onExport, hasStems, exportStatus, onClose,
 }: Props) {
   const { t } = useI18n();
+  const [exportStems, setExportStems] = useState(() => {
+    try { return localStorage.getItem("exportStems") !== "0"; } catch { return true; }
+  });
   // Show the phrases the export will use, also for songs that never had them recorded
   const [notes, setNotes] = useState<EditorNote[]>(() => {
     const plain = detachBreakMarks(initialNotes);
@@ -1576,8 +1582,25 @@ export default function TimelineEditor({
               {saveStatus === "saving" ? t("editor.saving") : saveStatus === "saved" ? t("editor.saved") : saveStatus === "error" ? t("editor.error") : t("editor.save")}
             </button>
           )}
+          {hasStems && (
+            <label
+              title={t("editor.exportStemsHint")}
+              className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-300"
+            >
+              <input
+                type="checkbox"
+                checked={exportStems}
+                onChange={(e) => {
+                  setExportStems(e.target.checked);
+                  try { localStorage.setItem("exportStems", e.target.checked ? "1" : "0"); } catch { /* ignore */ }
+                }}
+                className="h-3.5 w-3.5 accent-violet-500"
+              />
+              {t("editor.exportStems")}
+            </label>
+          )}
           <button
-            onClick={() => { setExportNoticeOpen(true); onExport(notes, bpm, gap); }}
+            onClick={() => { setExportNoticeOpen(true); onExport(notes, bpm, gap, hasStems ? exportStems : false); }}
             disabled={exportStatus?.busy}
             className="btn btn-primary !h-8 !px-3 !py-0 text-xs"
           >

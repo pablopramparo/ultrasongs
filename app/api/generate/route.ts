@@ -29,6 +29,8 @@ interface GenerateAuto {
   videoPath?: string;
   vocalsPath?: string;
   accompanimentPath?: string;
+  /** Include the vocals / instrumental stems (default true). */
+  exportStems?: boolean;
 }
 
 // Mode B: use notes already edited in the timeline editor
@@ -43,6 +45,7 @@ interface GenerateFromEditor {
   videoPath?: string;
   vocalsPath?: string;
   accompanimentPath?: string;
+  exportStems?: boolean;
 }
 
 type GenerateRequest = GenerateAuto | GenerateFromEditor;
@@ -133,7 +136,14 @@ export async function POST(request: NextRequest) {
     const videoFilename = videoPath ? path.basename(videoPath) : undefined;
     const coverSrc = coverPathFor(mp3);
     const coverFilename = existsSync(coverSrc) ? path.basename(coverSrc) : undefined;
-    const txt = buildUltrastarTxt(ultraNotes, { title, artist, mp3: mp3Filename, bpm, gap, video: videoFilename, cover: coverFilename });
+    const stemsReady =
+      body.exportStems !== false && !!vocalsPath && existsSync(vocalsPath) && !!accompanimentPath && existsSync(accompanimentPath);
+    const vocalsFilename = stemsReady ? `${title} [VOC].mp3` : undefined;
+    const instrumentalFilename = stemsReady ? `${title} [INSTR].mp3` : undefined;
+    const txt = buildUltrastarTxt(ultraNotes, {
+      title, artist, mp3: mp3Filename, bpm, gap, video: videoFilename, cover: coverFilename,
+      vocals: vocalsFilename, instrumental: instrumentalFilename,
+    });
 
     const zip = new JSZip();
     zip.file(`${title}.txt`, txt);
@@ -142,11 +152,9 @@ export async function POST(request: NextRequest) {
     if (videoPath && existsSync(videoPath)) {
       zip.file(videoFilename!, await readFile(videoPath));
     }
-    if (vocalsPath && existsSync(vocalsPath)) {
-      zip.file("vocals.mp3", await readFile(vocalsPath));
-    }
-    if (accompanimentPath && existsSync(accompanimentPath)) {
-      zip.file("accompaniment.mp3", await readFile(accompanimentPath));
+    if (stemsReady) {
+      zip.file(vocalsFilename!, await readFile(vocalsPath!));
+      zip.file(instrumentalFilename!, await readFile(accompanimentPath!));
     }
     const zipBuf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 
@@ -163,6 +171,8 @@ export async function POST(request: NextRequest) {
         const dir = await saveSongFolder({
           songsDir, title, artist, notes: ultraNotes, bpm, gap,
           mp3Path: mp3,
+          vocalsPath: stemsReady ? vocalsPath : undefined,
+          instrumentalPath: stemsReady ? accompanimentPath : undefined,
           draftId: typeof body.draftId === "string" ? body.draftId : undefined,
           videoPath: videoPath && existsSync(videoPath) ? videoPath : undefined,
         });
