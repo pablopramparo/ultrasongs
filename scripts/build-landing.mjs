@@ -35,7 +35,7 @@ const messages = {
     more: "Ver instalación y rendimiento", wip: "Proyecto en desarrollo activo. El resultado automático puede necesitar ajustes.",
     ctaLabel: "TU PRÓXIMA CANCIÓN EMPIEZA ACÁ", cta: 'Convertí tu música<br>en <span class="gradient">una experiencia.</span>', ctaBody: "Para cantar, compartir y disfrutar.",
     releases: "El botón abre las versiones disponibles en GitHub.",
-    source: "Código", license: "Licencia MIT", support: "Apoyar el proyecto",
+    source: "Código", license: "Licencia GPLv3", support: "Apoyar el proyecto",
     local: "Tu música se procesa en tu computadora.",
     language: "Idioma",
   },
@@ -68,7 +68,7 @@ const messages = {
     more: "See setup and performance", wip: "Actively in development. Automatic results may need adjustments.",
     ctaLabel: "YOUR NEXT SONG STARTS HERE", cta: 'Turn your music<br>into <span class="gradient">an experience.</span>', ctaBody: "Made to sing, share, and enjoy.",
     releases: "The button opens available releases on GitHub.",
-    source: "Source", license: "MIT License", support: "Support the project",
+    source: "Source", license: "GPLv3 License", support: "Support the project",
     local: "Your music is processed on your computer.",
     language: "Language",
   }

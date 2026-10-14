@@ -238,6 +238,6 @@ Powered by [Demucs](https://github.com/facebookresearch/demucs) (Meta Research),
 
 ## License
 
-The source code is released under the [MIT license](LICENSE).
+The source code is released under the [GNU GPLv3](LICENSE).
 
-**The MIT license does not cover the Ultrasongs name or the Ultrasongs logo** (the logo files in `public/`, `tauri-shell/`, `src-tauri/icons/`, `src-tauri/installer/` and `docs/assets/`, and the logo in the README and landing images). They are not licensed for reuse: if you fork or redistribute this project, please use your own name and logo.
+**The GPLv3 license does not cover the Ultrasongs name or the Ultrasongs logo** (the logo files in `public/`, `tauri-shell/`, `src-tauri/icons/`, `src-tauri/installer/` and `docs/assets/`, and the logo in the README and landing images). They are not licensed for reuse: if you fork or redistribute this project, please use your own name and logo.

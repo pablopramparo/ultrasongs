@@ -120,7 +120,7 @@
   "about.support": "Apoyar el proyecto",
   "about.poweredBy": "Funciona con",
   "about.format": "Genera canciones para",
-  "about.license": "Código fuente publicado bajo licencia MIT. El nombre y el logo de Ultrasongs no están incluidos en ella.",
+  "about.license": "Código fuente publicado bajo licencia GNU GPLv3. El nombre y el logo de Ultrasongs no están incluidos en ella.",
   "editor.exportStems": "Voz e instrumental por separado",
   "editor.exportStemsHint": "Agrega [VOC].mp3 e [INSTR].mp3 a la canción (#VOCALS / #INSTRUMENTAL)",
   "settings.choose": "Elegir",
