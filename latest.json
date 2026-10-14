@@ -1,11 +1,11 @@
 {
-  "version": "0.3.16",
-  "notes": "Ultrasongs 0.3.16",
-  "pub_date": "2026-10-13T20:33:00.936Z",
+  "version": "0.3.17",
+  "notes": "Ultrasongs 0.3.17",
+  "pub_date": "2026-10-14T00:42:51.777Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0J0QTY5bERWZVI0UThHb25tbko5dTg4K09nUjk0dlZlRWozY2xUMlZWTW1TUEZ1bVpGOHd0UTFIdkZRSW85alpHR2Z4V1lWb21GeDMwTCtFdEYyNndzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxOTIzNTgwCWZpbGU6VWx0cmFzb25nc18wLjMuMTZfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xNgpJaWFNeHdVY2ZCN0ZRNWFVdnBDSzhnRUIyYnBCQUhPYm5BeXFEL29UU0t5cWZLdzVmdnFJMWNzNFd0azdjdTVnQTVuZE1zd3pPSGtDSmZBcEtHYk5EUT09Cg==",
-      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.16/Ultrasongs_0.3.16_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTdUUwMUVyWE1hZ0N3SFI2UHB2V2VQOG5MRzBGMDR1cWR2ano4aUZUN0lRSkpIbFRDd2UvS0xGY2lBdWYxanJ4SXBxdEdIN3BsdjJQWHRteGF1ZFAzYi9oWXpIR3JCUHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxOTM4NTcxCWZpbGU6VWx0cmFzb25nc18wLjMuMTdfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMy4xNwp4OGwxZU8wWnVYTytMaXU0eHozMFJKUXI0RFNYNzFrc2JWbWVMb1ZqcHhabUtnbGNTMCsydUgrcDFDMHZJQWdhVUEwTEtZQ1d6djRINHhoODNiVXNCZz09Cg==",
+      "url": "https://github.com/pablopramparo/ultrasongs/releases/download/v0.3.17/Ultrasongs_0.3.17_x64-setup.exe"
     }
   }
 }
