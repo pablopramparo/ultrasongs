@@ -33,8 +33,12 @@ export interface EditorNote {
   wordStart?: boolean;
 }
 
+/** "~" in Ultrastar: the note extends the previous syllable (same text, another pitch). */
+export const isTilde = (syllable: string) => syllable.trim() === "~";
+
 /** True when the note opens a word, whatever its text looks like. */
 export function isWordStart(n: EditorNote): boolean {
+  if (isTilde(n.syllable)) return false; // always glued: it only extends the previous syllable
   return n.syllable.startsWith(" ") || (n.wordStart ?? !!n.lineStart);
 }
 

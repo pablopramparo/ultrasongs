@@ -1147,6 +1147,28 @@ export default function TimelineEditor({
     });
   }, [selectedId, snapshot]);
 
+  // ── Split selected note into "~" ──────────────────────────────────────────
+  // Same as split, but the second half is a "~" continuation of the syllable (a held vowel that
+  // changes pitch): it keeps the text on the first half and the pitch, ready to be dragged.
+  const splitTilde = useCallback(() => {
+    if (!selectedId) return;
+    snapshot();
+    setNotes((prev) => {
+      const idx = prev.findIndex((n) => n.id === selectedId);
+      if (idx === -1) return prev;
+      const n = prev[idx];
+      const half = n.durationSec / 2;
+      const a: EditorNote = { ...n, durationSec: half };
+      const b: EditorNote = {
+        ...n, id: crypto.randomUUID(), startSec: n.startSec + half, durationSec: half,
+        syllable: "~", lineStart: false, wordStart: undefined, breakSec: undefined,
+      };
+      const result = [...prev];
+      result.splice(idx, 1, a, b);
+      return result;
+    });
+  }, [selectedId, snapshot]);
+
   // ── Copy / paste ──────────────────────────────────────────────────────────
   // Copies keep their pitch and their spacing; pasting drops the first one at the playhead.
   const copySelection = useCallback(() => {
@@ -1222,6 +1244,11 @@ export default function TimelineEditor({
         e.preventDefault();
         splitSelected();
       }
+      // T: split into the syllable + a "~" continuation
+      if (e.code === "KeyT" && !mod && selectedId) {
+        e.preventDefault();
+        splitTilde();
+      }
       // L: this note opens a new phrase (a "-" line goes before it)
       if (e.code === "KeyL" && !mod && selection.length > 0) {
         e.preventDefault();
@@ -1267,7 +1294,7 @@ export default function TimelineEditor({
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [togglePlay, selection, selectedId, splitSelected, copySelection, pasteClipboard, snapshot, undo, redo]);
+  }, [togglePlay, selection, selectedId, splitSelected, splitTilde, copySelection, pasteClipboard, snapshot, undo, redo]);
 
   // ── Hand tool ─────────────────────────────────────────────────────────────
   // Captured before notes, grid, ruler or playhead see the press, so Space + drag never edits anything.
@@ -1911,6 +1938,9 @@ export default function TimelineEditor({
               />
               <button onClick={splitSelected} title={t("editor.splitTitle")} className={chip}>
                 {t("editor.split")}
+              </button>
+              <button onClick={splitTilde} title={t("editor.splitTildeTitle")} className={chip}>
+                {t("editor.splitTilde")}
               </button>
               <button
                 onClick={() => {
