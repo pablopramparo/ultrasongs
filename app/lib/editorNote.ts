@@ -25,6 +25,25 @@ export interface EditorNote {
    * automatically. Only meaningful together with `lineStart`.
    */
   breakSec?: number;
+  /**
+   * The note opens a word (Ultrastar glues every syllable without a leading space to the previous
+   * one). Only matters when the syllable has no leading space; undefined = a phrase's first note
+   * counts as a word start, any other one as a continuation. See isWordStart.
+   */
+  wordStart?: boolean;
+}
+
+/** True when the note opens a word, whatever its text looks like. */
+export function isWordStart(n: EditorNote): boolean {
+  return n.syllable.startsWith(" ") || (n.wordStart ?? !!n.lineStart);
+}
+
+/**
+ * Pins the word start down before `lineStart` is switched off: the phrase's first note carries no
+ * space in the .txt (the "-" line separates it), so without this it would glue to the previous word.
+ */
+export function pinWordStart(n: EditorNote): EditorNote {
+  return n.wordStart === undefined && n.lineStart ? { ...n, wordStart: true } : n;
 }
 
 /**

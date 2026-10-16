@@ -2,7 +2,7 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import MusicTempo from "music-tempo";
 import { existsSync } from "fs";
-import { detachBreakMarks, hasLineMarks, inferLineStarts, LINE_BREAK_GAP_SEC, type EditorNote, type NoteType } from "./editorNote";
+import { detachBreakMarks, hasLineMarks, inferLineStarts, isWordStart, LINE_BREAK_GAP_SEC, type EditorNote, type NoteType } from "./editorNote";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -75,7 +75,11 @@ export function editorNotesToUltrastar(
 
     // Notes may touch (start = previous end); they never overlap.
     const adjStart = prevEnd >= 0 ? Math.max(startBeat, afterBreak ? prevEnd + 1 : prevEnd) : startBeat;
-    out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable: en.syllable });
+    // The space is decided here, from the final layout: a word start gets one unless a "-" (or the
+    // song's start) already separates it, and a continuation never has one.
+    const body = en.syllable.replace(/^\s+/, "");
+    const syllable = body && isWordStart(en) && prevEnd >= 0 && !afterBreak ? ` ${body}` : body || en.syllable;
+    out.push({ type: en.type, startBeat: adjStart, duration, pitch: en.pitch, syllable });
     afterBreak = false;
     prevEnd = adjStart + duration;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Fragment } from "react";
-import { detachBreakMarks, hasLineMarks, inferLineStarts, phraseBreakSec, type EditorNote, type NoteType } from "@/app/lib/editorNote";
+import { detachBreakMarks, hasLineMarks, inferLineStarts, phraseBreakSec, pinWordStart, type EditorNote, type NoteType } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
@@ -1227,7 +1227,7 @@ export default function TimelineEditor({
         e.preventDefault();
         snapshot();
         setNotes((prev) =>
-          prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: !n.lineStart, breakSec: undefined } : n))
+          prev.map((n) => (ids.has(n.id) ? { ...pinWordStart(n), lineStart: !n.lineStart, breakSec: undefined } : n))
         );
       }
       // G: golden on/off (rap notes keep their rap kind); F: freestyle on/off
@@ -1896,7 +1896,15 @@ export default function TimelineEditor({
                   // One undo step per editing session of the field
                   if (!syllableEditedRef.current) { snapshot(); syllableEditedRef.current = true; }
                   const value = e.target.value;
-                  setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, syllable: value } : n)));
+                  // A typed leading space makes it a word start; removing it makes it a continuation
+                  setNotes((prev) =>
+                    prev.map((n) => {
+                      if (n.id !== selectedId) return n;
+                      const hadSpace = n.syllable.startsWith(" ");
+                      const hasSpace = value.startsWith(" ");
+                      return { ...n, syllable: value, ...(hadSpace !== hasSpace ? { wordStart: hasSpace } : {}) };
+                    })
+                  );
                 }}
                 placeholder={t("editor.syllable")}
                 className="h-8 w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 focus:border-blue-500 focus:outline-none"
@@ -1909,7 +1917,7 @@ export default function TimelineEditor({
                   const ids = new Set(selection);
                   const next = !selectedNote?.lineStart;
                   snapshot();
-                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, lineStart: next } : n)));
+                  setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...pinWordStart(n), lineStart: next } : n)));
                 }}
                 title={t("editor.newPhraseTitle")}
                 aria-pressed={!!selectedNote?.lineStart}
