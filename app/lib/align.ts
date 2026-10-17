@@ -19,28 +19,28 @@ interface WordWithPitch extends WordTimestamp {
   pitchFrames?: PitchFrame[];
 }
 
-const MAX_FORWARD_SEARCH_SEC = 20;
-const MAX_SHORT_WORD_SEARCH_SEC = 2;
 const MAX_IN_LINE_GAP_SEC = 4;
+const SKIP_LYRIC_WORD_COST = 0.48;
+const SKIP_TRANSCRIPT_WORD_COST = 0.18;
 
 /** Levenshtein distance between two strings. */
 function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-  );
+  if (a.length > b.length) [a, b] = [b, a];
+  let previous = Array.from({ length: a.length + 1 }, (_, i) => i);
+  let current = new Array<number>(a.length + 1);
 
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] =
-        a[i - 1] === b[j - 1]
-          ? dp[i - 1][j - 1]
-          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  for (let i = 1; i <= b.length; i++) {
+    current[0] = i;
+    for (let j = 1; j <= a.length; j++) {
+      current[j] =
+        a[j - 1] === b[i - 1]
+          ? previous[j - 1]
+          : 1 + Math.min(previous[j], current[j - 1], previous[j - 1]);
     }
+    [previous, current] = [current, previous];
   }
 
-  return dp[m][n];
+  return previous[a.length];
 }
 
 function normalize(w: string): string {
@@ -60,6 +60,11 @@ function wordScore(lNorm: string, wNorm: string): number {
   if (lNorm.length >= 3 && wNorm.length > lNorm.length && wNorm.endsWith(lNorm)) return 0.05;
   if (lNorm.length >= 3 && wNorm.startsWith(lNorm)) return 0.1;
 
+  const maxScore = maxTextScore(lNorm);
+  if (Math.abs(lNorm.length - wNorm.length) > maxScore * Math.max(lNorm.length, wNorm.length, 1)) {
+    return Infinity;
+  }
+
   const dist = levenshtein(lNorm, wNorm);
   return dist / Math.max(lNorm.length, wNorm.length, 1);
 }
@@ -71,103 +76,113 @@ function maxTextScore(lNorm: string): number {
   return 0.45;
 }
 
-function matchLine(
-  lineWords: string[],
+/**
+ * Aligns the complete lyric and transcript sequences together. Greedy line-by-line matching can
+ * consume a later chorus when a rap line is poorly recognized, leaving the following lyric lines
+ * with no anchors. A monotonic sequence alignment keeps repeated phrases in their actual order.
+ */
+function matchWords(
+  lyricWords: string[],
   whisperWords: WordTimestamp[],
-  whisperNorm: string[],
-  searchStart: number,
-  lastMatchTime: number
-): { matched: Array<WordTimestamp | null>; searchStart: number; lastMatchTime: number } {
-  const matched: Array<WordTimestamp | null> = [];
-  let ss = searchStart;
-  let lmt = lastMatchTime;
-  const matchedTimes: number[] = [];
-  const matchedIndices: Array<number | null> = [];
+  whisperNorm: string[]
+): Array<WordTimestamp | null> {
+  const cols = whisperWords.length + 1;
+  const costs = new Float64Array((lyricWords.length + 1) * cols);
+  const steps = new Uint8Array(costs.length); // 1 = skip lyric, 2 = skip transcript, 3 = match
+  costs.fill(Infinity);
+  costs[0] = 0;
 
-  for (const lw of lineWords) {
-    const lNorm = normalize(lw);
-    if (!lNorm) {
-      matched.push(null);
-      continue;
-    }
+  for (let j = 1; j <= whisperWords.length; j++) {
+    costs[j] = costs[j - 1] + SKIP_TRANSCRIPT_WORD_COST;
+    steps[j] = 2;
+  }
 
-    let bestIdx = -1;
-    let bestScore = Infinity;
-    let bestTextScore = Infinity;
+  for (let i = 1; i <= lyricWords.length; i++) {
+    const row = i * cols;
+    costs[row] = costs[row - cols] + SKIP_LYRIC_WORD_COST;
+    steps[row] = 1;
 
-    for (let i = ss; i < whisperWords.length; i++) {
-      const searchWindow = lNorm.length <= 2 ? MAX_SHORT_WORD_SEARCH_SEC : MAX_FORWARD_SEARCH_SEC;
-      if (lmt >= 0 && whisperWords[i].start > lmt + searchWindow) break;
-      if (lmt < 0 && whisperWords[i].start > MAX_FORWARD_SEARCH_SEC) break;
+    const lyricNorm = normalize(lyricWords[i - 1]);
+    for (let j = 1; j <= whisperWords.length; j++) {
+      const cell = row + j;
+      let bestCost = costs[cell - cols] + SKIP_LYRIC_WORD_COST;
+      let step = 1;
 
-      const textScore = wordScore(lNorm, whisperNorm[i]);
-      if (textScore > maxTextScore(lNorm)) continue;
-
-      const jump = lmt >= 0
-        ? Math.max(0, whisperWords[i].start - lmt - 4)
-        : Math.max(0, whisperWords[i].start - 20);
-      const score = textScore + jump * (lmt >= 0 ? 0.03 : 0.05);
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestTextScore = textScore;
-        bestIdx = i;
+      const skipTranscript = costs[cell - 1] + SKIP_TRANSCRIPT_WORD_COST;
+      if (skipTranscript < bestCost) {
+        bestCost = skipTranscript;
+        step = 2;
       }
-      if (bestScore === 0) break;
-    }
 
-    if (bestIdx >= 0 && bestTextScore <= maxTextScore(lNorm)) {
-      ss = bestIdx + 1;
-      lmt = whisperWords[bestIdx].start;
-      matched.push(whisperWords[bestIdx]);
-      matchedTimes.push(whisperWords[bestIdx].start);
-      matchedIndices.push(bestIdx);
-    } else {
-      matched.push(null);
-      matchedIndices.push(null);
+      if (lyricNorm) {
+        const textScore = wordScore(lyricNorm, whisperNorm[j - 1]);
+        if (textScore <= maxTextScore(lyricNorm)) {
+          const shortWordPenalty = lyricNorm.length <= 2 ? 0.12 : 0;
+          const matchCost = costs[cell - cols - 1] + textScore + shortWordPenalty;
+          if (matchCost < bestCost) {
+            bestCost = matchCost;
+            step = 3;
+          }
+        }
+      }
+
+      costs[cell] = bestCost;
+      steps[cell] = step;
     }
   }
 
+  const matched: Array<WordTimestamp | null> = Array(lyricWords.length).fill(null);
+  let i = lyricWords.length;
+  let j = whisperWords.length;
+  while (i > 0 || j > 0) {
+    const step = steps[i * cols + j];
+    if (step === 3) {
+      matched[i - 1] = whisperWords[j - 1];
+      i--;
+      j--;
+    } else if (step === 1) {
+      i--;
+    } else if (step === 2) {
+      j--;
+    } else {
+      break;
+    }
+  }
+
+  return matched;
+}
+
+/** Drops isolated phrase matches when the transcript has latched onto a repeated or noisy phrase. */
+function keepBestLineCluster(
+  matched: Array<WordTimestamp | null>,
+  lineWords: string[]
+): Array<WordTimestamp | null> {
   const clusters: Array<Array<number>> = [];
   for (let pos = 0; pos < matched.length; pos++) {
-    const idx = matchedIndices[pos];
-    if (idx === null) continue;
+    const current = matched[pos];
+    if (!current) continue;
     const prevCluster = clusters[clusters.length - 1];
     const prevPos = prevCluster?.[prevCluster.length - 1];
-    const prevIdx = prevPos === undefined ? null : matchedIndices[prevPos];
     const startsNewCluster =
-      prevIdx !== null &&
-      whisperWords[idx].start - whisperWords[prevIdx].start > MAX_IN_LINE_GAP_SEC;
+      prevPos !== undefined && current.start - matched[prevPos]!.start > MAX_IN_LINE_GAP_SEC;
 
     if (!prevCluster || startsNewCluster) clusters.push([pos]);
     else prevCluster.push(pos);
   }
 
+  let kept = [...matched];
   if (clusters.length > 1) {
     const keep = clusters.reduce((best, cluster) =>
       cluster.length > best.length ? cluster : best
     );
     const keepSet = new Set(keep);
     for (let pos = 0; pos < matched.length; pos++) {
-      if (!keepSet.has(pos)) {
-        matched[pos] = null;
-        matchedIndices[pos] = null;
-      }
-    }
-    const lastKeptPos = keep[keep.length - 1];
-    const lastKeptIdx = matchedIndices[lastKeptPos];
-    if (lastKeptIdx !== null) {
-      ss = lastKeptIdx + 1;
-      lmt = whisperWords[lastKeptIdx].start;
+      if (!keepSet.has(pos)) kept[pos] = null;
     }
   }
 
-  const keptTimes = matchedIndices
-    .filter((idx): idx is number => idx !== null)
-    .map((idx) => whisperWords[idx].start);
-  const keptSignificantMatches = matched
-    .filter((m) => m && normalize(m.word).length > 2)
-    .length;
+  const keptTimes = kept.filter((m): m is WordTimestamp => m !== null).map((m) => m.start);
+  const keptSignificantMatches = kept.filter((m) => m && normalize(m.word).length > 2).length;
   const lineSpan = keptTimes.length > 1
     ? Math.max(...keptTimes) - Math.min(...keptTimes)
     : 0;
@@ -177,14 +192,10 @@ function matchLine(
     (lineWords.length >= 4 && keptSignificantMatches === 0) ||
     (lineWords.length >= 4 && lineSpan > maxLineSpan)
   ) {
-    return {
-      matched: lineWords.map(() => null),
-      searchStart,
-      lastMatchTime,
-    };
+    return lineWords.map(() => null);
   }
 
-  return { matched, searchStart: ss, lastMatchTime: lmt };
+  return kept;
 }
 
 const SNAP_MIN_WORD_SEC = 0.12;   // below this per word the voiced stretch is too short to trust
@@ -391,19 +402,19 @@ export function alignLyrics(
   const allMatched: Array<WordTimestamp | null> = [];
   const allLyricWords: string[] = [];
   const lineOf: number[] = [];
+  const lineWords = lines.map((line) => line.split(/\s+/).filter(Boolean));
+  for (const [li, words] of lineWords.entries()) {
+    allLyricWords.push(...words);
+    words.forEach(() => lineOf.push(li));
+  }
 
-  let searchStart = 0;
-  let lastMatchTime = -1;
-
-  for (const [li, line] of lines.entries()) {
-    const lineWords = line.split(/\s+/).filter(Boolean);
-    allLyricWords.push(...lineWords);
-    lineWords.forEach(() => lineOf.push(li));
-
-    const res = matchLine(lineWords, whisperWords, whisperNorm, searchStart, lastMatchTime);
-    allMatched.push(...fixStretchedWords(res.matched));
-    searchStart = res.searchStart;
-    lastMatchTime = res.lastMatchTime;
+  const sequentialMatches = matchWords(allLyricWords, whisperWords, whisperNorm);
+  let wordOffset = 0;
+  for (const words of lineWords) {
+    const end = wordOffset + words.length;
+    const lineMatches = keepBestLineCluster(sequentialMatches.slice(wordOffset, end), words);
+    allMatched.push(...fixStretchedWords(lineMatches));
+    wordOffset = end;
   }
 
   const interpolated = interpolateMissing(allMatched, allLyricWords, lineOf, pauses);
