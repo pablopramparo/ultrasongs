@@ -22,6 +22,7 @@ interface WordWithPitch extends WordTimestamp {
 const MAX_IN_LINE_GAP_SEC = 4;
 const SKIP_LYRIC_WORD_COST = 0.48;
 const SKIP_TRANSCRIPT_WORD_COST = 0.18;
+const EARLIER_TRANSCRIPT_TIE_BREAK = 1e-8;
 
 /** Levenshtein distance between two strings. */
 function levenshtein(a: string, b: string): number {
@@ -79,7 +80,8 @@ function maxTextScore(lNorm: string): number {
 /**
  * Aligns the complete lyric and transcript sequences together. Greedy line-by-line matching can
  * consume a later chorus when a rap line is poorly recognized, leaving the following lyric lines
- * with no anchors. A monotonic sequence alignment keeps repeated phrases in their actual order.
+ * with no anchors. A monotonic sequence alignment keeps repeated phrases in order; a tiny position
+ * cost resolves equal-score repetitions in favor of their earliest transcript occurrence.
  */
 function matchWords(
   lyricWords: string[],
@@ -118,7 +120,8 @@ function matchWords(
         const textScore = wordScore(lyricNorm, whisperNorm[j - 1]);
         if (textScore <= maxTextScore(lyricNorm)) {
           const shortWordPenalty = lyricNorm.length <= 2 ? 0.12 : 0;
-          const matchCost = costs[cell - cols - 1] + textScore + shortWordPenalty;
+          const matchCost =
+            costs[cell - cols - 1] + textScore + shortWordPenalty + j * EARLIER_TRANSCRIPT_TIE_BREAK;
           if (matchCost < bestCost) {
             bestCost = matchCost;
             step = 3;
