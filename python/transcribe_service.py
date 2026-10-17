@@ -166,7 +166,7 @@ def add_pitch_to_words(raw_words, times, freqs, confs) -> list:
     return words
 
 
-def transcribe_with_whisperx(vocals_wav_path: str, prompt: str = "") -> tuple[list, str]:
+def transcribe_with_whisperx(vocals_wav_path: str, prompt: str = "", language_hint: str = "") -> tuple[list, str]:
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.abspath(os.path.join(here, ".."))
     worker = os.path.join(here, "whisperx_worker.py")
@@ -188,7 +188,8 @@ def transcribe_with_whisperx(vocals_wav_path: str, prompt: str = "") -> tuple[li
         "--audio", vocals_wav_path,
         "--model", WHISPERX_MODEL,
     ]
-    language = os.environ.get("WHISPERX_LANGUAGE", "")
+    # An explicit deployment setting wins; otherwise trust a confident language inferred from lyrics.
+    language = os.environ.get("WHISPERX_LANGUAGE", "").strip() or language_hint.strip()
     if language:
         cmd.extend(["--language", language])
     if prompt:
@@ -262,7 +263,11 @@ HEARTBEAT_INTERVAL = 25  # seconds — keeps undici's 5-min bodyTimeout from fir
 
 
 @app.post("/transcribe")
-async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
+async def transcribe(
+    mp3_path: str = Form(...),
+    lyrics: str = Form(""),
+    language_hint: str = Form("", alias="language"),
+):
     if not os.path.exists(mp3_path):
         raise HTTPException(status_code=404, detail=f"File not found: {mp3_path}")
 
@@ -321,12 +326,15 @@ async def transcribe(mp3_path: str = Form(...), lyrics: str = Form("")):
                 def do_whisper():
                     # Runs on the Demucs vocals WAV (cleaner than the full mix).
                     if ALIGN_ENGINE == "whisperx":
-                        raw_words, language = transcribe_with_whisperx(vocals_wav_path, prompt=prompt or "")
-                        return add_pitch_to_words(raw_words, times, freqs, confs), language
+                        raw_words, detected_language = transcribe_with_whisperx(
+                            vocals_wav_path, prompt=prompt or "", language_hint=language_hint,
+                        )
+                        return add_pitch_to_words(raw_words, times, freqs, confs), detected_language
 
                     segs, info = whisper_model.transcribe(
                         vocals_wav_path,
                         word_timestamps=True,
+                        language=language_hint or None,
                         initial_prompt=prompt,
                         # Stops a bad segment from poisoning the next ones (repetition / drift in singing).
                         condition_on_previous_text=False,

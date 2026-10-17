@@ -3,6 +3,7 @@ import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { ensureService } from "@/app/lib/setup/service";
 import { existsSync } from "fs";
 import { resolveAllowed } from "@/app/lib/safePath";
+import { inferLyricsLanguage } from "@/app/lib/language";
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL ?? "http://localhost:8001";
 
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest) {
     const formData = new FormData();
     formData.append("mp3_path", mp3);
     if (lyrics && typeof lyrics === "string") formData.append("lyrics", lyrics);
+    const lyricsLanguage = typeof lyrics === "string" ? inferLyricsLanguage(lyrics) : null;
+    if (lyricsLanguage) formData.append("language", lyricsLanguage);
 
     let serviceRes: Response;
     try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError, apiFailure } from "@/app/lib/apiResponse";
 import { existsSync } from "fs";
 import { alignLyrics } from "@/app/lib/align";
+import { inferLyricsLanguage } from "@/app/lib/language";
 import { detectBpm } from "@/app/lib/ultrastar";
 import type { WordTimestamp, Pause } from "@/app/api/transcribe/route";
 import type { EditorNote } from "@/app/lib/editorNote";
@@ -30,8 +31,9 @@ export async function POST(request: NextRequest) {
       return apiError("api.audioNotFound", 404);
     }
 
+    const alignmentLanguage = inferLyricsLanguage(lyrics) ?? language;
     const [aligned, { bpm }] = await Promise.all([
-      Promise.resolve(alignLyrics(lyrics, words, language, pauses)),
+      Promise.resolve(alignLyrics(lyrics, words, alignmentLanguage, pauses)),
       detectBpm(mp3),
     ]);
 

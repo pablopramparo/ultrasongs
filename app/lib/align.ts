@@ -19,7 +19,8 @@ interface WordWithPitch extends WordTimestamp {
   pitchFrames?: PitchFrame[];
 }
 
-const MAX_FORWARD_SEARCH_SEC = 90;
+const MAX_FORWARD_SEARCH_SEC = 20;
+const MAX_SHORT_WORD_SEARCH_SEC = 2;
 const MAX_IN_LINE_GAP_SEC = 4;
 
 /** Levenshtein distance between two strings. */
@@ -66,7 +67,7 @@ function wordScore(lNorm: string, wNorm: string): number {
 function maxTextScore(lNorm: string): number {
   if (lNorm.length <= 2) return 0.05;
   if (lNorm.length === 3) return 0.26;
-  if (lNorm.length <= 5) return 0.42;
+  if (lNorm.length <= 5) return 0.28;
   return 0.45;
 }
 
@@ -95,16 +96,17 @@ function matchLine(
     let bestTextScore = Infinity;
 
     for (let i = ss; i < whisperWords.length; i++) {
-      if (lmt >= 0 && whisperWords[i].start > lmt + MAX_FORWARD_SEARCH_SEC) break;
+      const searchWindow = lNorm.length <= 2 ? MAX_SHORT_WORD_SEARCH_SEC : MAX_FORWARD_SEARCH_SEC;
+      if (lmt >= 0 && whisperWords[i].start > lmt + searchWindow) break;
       if (lmt < 0 && whisperWords[i].start > MAX_FORWARD_SEARCH_SEC) break;
 
       const textScore = wordScore(lNorm, whisperNorm[i]);
       if (textScore > maxTextScore(lNorm)) continue;
 
       const jump = lmt >= 0
-        ? Math.max(0, whisperWords[i].start - lmt - 20)
+        ? Math.max(0, whisperWords[i].start - lmt - 4)
         : Math.max(0, whisperWords[i].start - 20);
-      const score = textScore + jump * (lmt >= 0 ? 0.015 : 0.05);
+      const score = textScore + jump * (lmt >= 0 ? 0.03 : 0.05);
 
       if (score < bestScore) {
         bestScore = score;
