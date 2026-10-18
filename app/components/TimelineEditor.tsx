@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, Fragment } from "react";
-import { detachBreakMarks, hasLineMarks, inferLineStarts, phraseBreakSec, pinWordStart, type EditorNote, type NoteType } from "@/app/lib/editorNote";
+import { detachBreakMarks, hasLineMarks, inferLineStarts, isTilde, isWordStart, phraseBreakSec, pinWordStart, type EditorNote, type NoteType } from "@/app/lib/editorNote";
 import { detectPitch, hzToMidi } from "@/app/lib/pitchDetection";
 import { useI18n } from "@/app/i18n/I18nProvider";
 import RangeSlider from "./RangeSlider";
@@ -289,6 +289,18 @@ export default function TimelineEditor({
   const toggleFollow = (on: boolean) => {
     setFollowPlayhead(on);
     try { localStorage.setItem("ultrasongs.editor.follow", on ? "1" : "0"); } catch { /* ignore */ }
+  };
+  const [showLyrics, setShowLyrics] = useState(() => {
+    try { return localStorage.getItem("ultrasongs.editor.lyrics") !== "0"; } catch { return true; }
+  });
+  // Syllable being typed into in the lyrics panel (double-click); never set by plain selection
+  const [editingLyricId, setEditingLyricId] = useState<string | null>(null);
+  const lyricsPanelRef = useRef<HTMLDivElement>(null);
+  const toggleLyrics = () => {
+    setShowLyrics((on) => {
+      try { localStorage.setItem("ultrasongs.editor.lyrics", on ? "0" : "1"); } catch { /* ignore */ }
+      return !on;
+    });
   };
   const [helpOpen, setHelpOpen] = useState(false);
   // The export result card stays until dismissed; a new export reopens it.
@@ -1324,6 +1336,35 @@ export default function TimelineEditor({
     window.addEventListener("mouseup", onUp);
   }, []);
 
+  // Keep the selected syllable visible in the panel when it was picked on the timeline
+  useEffect(() => {
+    if (!selectedId) return;
+    lyricsPanelRef.current
+      ?.querySelector(`[data-lyric-id="${selectedId}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
+
+  // ── Lyrics panel ──────────────────────────────────────────────────────────
+  // Notes in time order, grouped into phrases (a new group at every phrase start).
+  const lyricLines: EditorNote[][] = [];
+  for (const n of [...notes].sort((a, b) => a.startSec - b.startSec)) {
+    if (lyricLines.length === 0 || n.lineStart) lyricLines.push([n]);
+    else lyricLines[lyricLines.length - 1].push(n);
+  }
+
+  // Glues a note to the previous one or makes it start a new word (leading space + wordStart flag).
+  const toggleWordBreak = (id: string) => {
+    snapshot();
+    setNotes((prev) =>
+      prev.map((n) => {
+        if (n.id !== id) return n;
+        const start = !isWordStart(n);
+        const bare = n.syllable.trimStart();
+        return { ...n, syllable: start ? ` ${bare}` : bare, wordStart: start };
+      })
+    );
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const playheadX = KEYS_W + playheadSec * pxPerSec;
   const micY = micMidi !== null ? pitchToY(micMidi) + pxPitch / 2 : null;
@@ -1583,6 +1624,15 @@ export default function TimelineEditor({
           >
             ?
           </button>
+          <button
+            onClick={toggleLyrics}
+            title={t("editor.lyrics")}
+            aria-label={t("editor.lyrics")}
+            aria-pressed={showLyrics}
+            className={`${squareBtn} ${showLyrics ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"}`}
+          >
+            Aa
+          </button>
           {videoUrl && (
             <button
               onClick={toggleVideo}
@@ -1650,6 +1700,7 @@ export default function TimelineEditor({
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1">
       {/* ── Piano roll ── */}
       <div
         ref={scrollRef}
@@ -1659,7 +1710,7 @@ export default function TimelineEditor({
           e.preventDefault();
           e.stopPropagation();
         }}
-        className={`min-h-0 flex-1 overflow-auto bg-zinc-950 ${
+        className={`min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-950 ${
           panning ? "[&_*]:!cursor-grabbing" : spaceHeld ? "[&_*]:!cursor-grab" : ""
         }`}
       >
@@ -1889,6 +1940,70 @@ export default function TimelineEditor({
             }} />
           )}
         </div>
+      </div>
+
+      {showLyrics && (
+        <aside className="flex w-72 shrink-0 flex-col border-l border-zinc-800 bg-zinc-900 text-xs">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
+            <span className="font-medium text-zinc-200">{t("editor.lyrics")}</span>
+            <span className="text-[11px] text-zinc-500">{t("editor.lyricsHint")}</span>
+          </div>
+          <div ref={lyricsPanelRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            {lyricLines.map((line, li) => (
+              <div key={li} className="flex flex-wrap items-center leading-7">
+                {line.map((n, i) => {
+                  const active = selection.includes(n.id);
+                  const text = n.syllable.trim();
+                  return (
+                    <Fragment key={n.id}>
+                      {i > 0 && (
+                        <button
+                          onClick={() => toggleWordBreak(n.id)}
+                          title={isWordStart(n) ? t("editor.joinTitle") : t("editor.separateTitle")}
+                          className={`mx-px h-5 rounded px-1 font-mono text-[11px] transition-colors ${
+                            isWordStart(n)
+                              ? "w-3 text-transparent hover:bg-zinc-700 hover:text-zinc-300"
+                              : "text-amber-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {isWordStart(n) ? "·" : "‿"}
+                        </button>
+                      )}
+                      {editingLyricId === n.id ? (
+                        <input
+                          autoFocus
+                          onBlur={() => setEditingLyricId(null)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+                          value={text}
+                          onFocus={(e) => { syllableEditedRef.current = false; e.currentTarget.select(); }}
+                          onChange={(e) => {
+                            if (!syllableEditedRef.current) { snapshot(); syllableEditedRef.current = true; }
+                            const value = (n.syllable.startsWith(" ") ? " " : "") + e.target.value.replace(/\s/g, "");
+                            setNotes((prev) => prev.map((x) => (x.id === n.id ? { ...x, syllable: value } : x)));
+                          }}
+                          style={{ width: `${Math.max(2, text.length + 1)}ch` }}
+                          className="h-6 rounded border border-blue-500 bg-zinc-950 px-1 text-zinc-100 focus:outline-none"
+                        />
+                      ) : (
+                        <button
+                          data-lyric-id={n.id}
+                          onClick={() => { setSelection([n.id]); seekTo(n.startSec); }}
+                          onDoubleClick={() => { setSelection([n.id]); setEditingLyricId(n.id); }}
+                          className={`rounded px-0.5 transition-colors ${
+                            active ? "bg-blue-600 text-white" : "text-zinc-200 hover:bg-zinc-700"
+                          } ${isTilde(n.syllable) ? "text-zinc-500" : ""}`}
+                        >
+                          {text || "·"}
+                        </button>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </aside>
+      )}
       </div>
 
       {/* Video thumbnail, floating over the roll so it takes no layout space */}
